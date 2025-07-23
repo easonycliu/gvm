@@ -1,6 +1,7 @@
 debian
 FlameGraph
 grublist
+grub-list.py
 tmp
 grublist.tar.gz
 NsightSystems-linux-cli-public-2025.3.1.90-3582212.deb
