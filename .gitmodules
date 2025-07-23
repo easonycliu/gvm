@@ -1,12 +1,9 @@
 [submodule "open-gpu-kernel-modules"]
 	path = open-gpu-kernel-modules
 	url = git@github.com:easonycliu/PFScheOpenGPUKernelModules.git
-[submodule "gpuapp"]
-	path = gpuapp
-	url = git@github.com:easonycliu/PFScheGPUTests.git
 [submodule "linux"]
 	path = linux
 	url = git@github.com:easonycliu/GCGroupLinux.git
 [submodule "llama.cpp"]
-	path = llama.cpp
-	url = git@github.com:ggml-org/llama.cpp.git
+	path = playground/infer/llama.cpp
+	url = git@github.com:easonycliu/GCGroupLlama.cpp.git
