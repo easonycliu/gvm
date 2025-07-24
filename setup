@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Check argument count
+if [ "$#" -ne 1 ]; then
+	echo "Usage: $0 {install_deps|install_cuda|install_linux|install_driver}"
+	exit 1
+fi
+
+case "$1" in
+	install_deps)
+		echo "Running deps logic..."
+		sudo apt install flex bison libssl-dev libelf-dev
+		;;
+	install_cuda)
+		echo "Running cuda logic..."
+		mkdir -p cuda_deb
+		for file in $(ls cuda); do cat cuda/$(file)/part_* > cuda_deb/$(file).deb; done
+		pushd cuda_deb
+		sudo dpkg -i $(ls)
+		popd
+		;;
+	install_linux)
+		echo "Running linux logic..."
+		cp configs/config-gcgroup-seoul-l4 linux/.config
+		pushd linux
+		make olddefconfig && make -j$(shell nproc) && sudo make modules_install -j$(shell nproc) && sudo make install
+		popd
+		;;
+	install_driver)
+		echo "Running driver logic..."
+		pushd open-gpu-kernel-modules
+		make -j$(shell nproc)
+		popd
+
+		pushd open-gpu-kernel-modules/kernel-open
+		sudo rmmod nvidia_uvm
+		sudo rmmod nvidia_drm
+		sudo rmmod nvidia_modeset
+		sudo rmmod nvidia
+		popd
+
+		sudo insmod /lib/modules/6.11.0-gcgroup+/kernel/drivers/platform/x86/wmi.ko
+		sudo insmod /lib/modules/6.11.0-gcgroup+/kernel/drivers/acpi/video.ko
+		sudo insmod /lib/modules/6.11.0-gcgroup+/kernel/drivers/gpu/drm/ttm/ttm.ko
+		sudo insmod /lib/modules/6.11.0-gcgroup+/kernel/drivers/gpu/drm/drm_ttm_helper.ko
+
+		pushd open-gpu-kernel-modules/kernel-open
+		sudo insmod nvidia.ko
+		sudo insmod nvidia-modeset.ko
+		sudo insmod nvidia-drm.ko
+		sudo insmod nvidia-uvm.ko
+		popd
+
+		sudo mknod -m 666 /dev/nvidia0 c 195 0
+		sudo mknod -m 666 /dev/nvidiactl c 195 255
+		sudo mknod -m 666 /dev/nvidia-modeset c 195 254
+		sudo mknod -m 666 /dev/nvidia-uvm c 508 0
+		sudo mknod -m 666 /dev/nvidia-uvm-tools c 508 1
+		;;
+	*)
+		echo "Invalid argument: $1"
+		echo "Usage: $0 {install_deps|install_cuda|install_linux|install_driver}"
+		exit 1
+		;;
+esac
