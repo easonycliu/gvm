@@ -10,3 +10,6 @@
 [submodule "cuda"]
 	path = cuda
 	url = https://github.com/easonycliu/cuda12.9-driver575.57.08.git
+[submodule "grublist"]
+	path = tools/grublist
+	url = git@github.com:easonycliu/grublist.git

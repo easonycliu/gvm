@@ -1,6 +1,5 @@
 debian
 FlameGraph
-grublist
 grub-list.py
 tmp
 grublist.tar.gz
