@@ -2,34 +2,40 @@
 
 # Check argument count
 if [ "$#" -ne 1 ]; then
-	echo "Usage: $0 {install_deps|install_cuda|install_linux|install_driver}"
+	echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|llamafactory|vllm}"
 	exit 1
 fi
 
 case "$1" in
-	install_deps)
+	deps)
 		echo "Running deps logic..."
 		sudo apt install flex bison libssl-dev libelf-dev
 		;;
-	install_cuda)
+	cuda)
 		echo "Running cuda logic..."
 		mkdir -p cuda_deb
-		for file in $(ls cuda); do cat cuda/$(file)/part_* > cuda_deb/$(file).deb; done
+		for file in $(ls cuda); do cat cuda/${file}/part_* > cuda_deb/${file}.deb; done
 		pushd cuda_deb
 		sudo dpkg -i $(ls)
 		popd
 		;;
-	install_linux)
+	linux)
 		echo "Running linux logic..."
 		cp configs/config-gcgroup-seoul-l4 linux/.config
 		pushd linux
-		make olddefconfig && make -j$(shell nproc) && sudo make modules_install -j$(shell nproc) && sudo make install
+		make olddefconfig && make -j`nproc` && sudo make modules_install -j`nproc` && sudo make install
 		popd
 		;;
-	install_driver)
+	cuda_custom)
+		echo "Running cuda_custom logic..."
+		pushd cuda_custom
+		make EXTRA_CXXFLAGS="-I/usr/local/cuda-12.9/targets/x86_64-linux/include"
+		popd
+		;;
+	driver)
 		echo "Running driver logic..."
 		pushd open-gpu-kernel-modules
-		make -j$(shell nproc)
+		make -j`nproc`
 		popd
 
 		pushd open-gpu-kernel-modules/kernel-open
@@ -57,9 +63,21 @@ case "$1" in
 		sudo mknod -m 666 /dev/nvidia-uvm c 508 0
 		sudo mknod -m 666 /dev/nvidia-uvm-tools c 508 1
 		;;
+	examples)
+		echo "Running examples logic..."
+		;;
+	llama.cpp)
+		echo "Running llama.cpp logic..."
+		;;
+	llamafactory)
+		echo "Running llamafactory logic..."
+		;;
+	vllm)
+		echo "Running vllm logic..."
+		;;
 	*)
 		echo "Invalid argument: $1"
-		echo "Usage: $0 {install_deps|install_cuda|install_linux|install_driver}"
+		echo "Usage: $0 {deps|cuda|linux|driver|examples|llama.cpp|llamafactory|vllm}"
 		exit 1
 		;;
 esac
