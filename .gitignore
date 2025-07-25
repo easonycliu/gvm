@@ -10,10 +10,10 @@ cuda_deb
 
 playground/examples/*
 !playground/examples/*.cu
-playground/infer/venv
+playground/infer/venv/*
 !playground/infer/venv/.gitkeep
-playground/train/venv
-playground/train/venv/.gitkeep
+playground/train/venv/*
+!playground/train/venv/.gitkeep
 
 cuda/*
 !cuda/.gitkeep
