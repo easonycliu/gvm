@@ -2,14 +2,14 @@
 
 # Check argument count
 if [ "$#" -ne 1 ]; then
-	echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|llamafactory|vllm}"
+	echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|diffusion|llamafactory|vllm}"
 	exit 1
 fi
 
 case "$1" in
 	deps)
 		echo "Running deps logic..."
-		sudo apt install flex bison libssl-dev libelf-dev
+		sudo apt install flex bison cmake libssl-dev libelf-dev libcurl4-openssl-dev python3-pip python3-venv
 		;;
 	cuda)
 		echo "Running cuda logic..."
@@ -68,16 +68,60 @@ case "$1" in
 		;;
 	llama.cpp)
 		echo "Running llama.cpp logic..."
+		pushd playground/infer/llama.cpp
+		cmake -B build
+		cmake --build build --config Release
+		popd
+		;;
+	diffusion)
+		echo "Running diffusion logic..."
+		if [ ! -d "playground/infer/venv/diffusion" ]; then
+			pushd playground/infer/venv
+			python3 -m venv diffusion
+			popd
+		fi
+		source playground/infer/venv/diffusion/bin/activate
+		pushd playground/infer/diffusion
+		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		pip3 install diffusers
+		pip3 install transformers
+		pip3 install protobuf
+		pip3 install sentencepiece
+		pip3 install accelerate
+		popd
+		deactivate
 		;;
 	llamafactory)
 		echo "Running llamafactory logic..."
+		if [ ! -d "playground/train/venv/LLaMA-Factory" ]; then
+			pushd playground/train/venv
+			python3 -m venv LLaMA-Factory
+			popd
+		fi
+		source playground/train/venv/LLaMA-Factory/bin/activate
+		pushd playground/train/LLaMA-Factory
+		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		pip3 install -e ".[torch,metrics]" --no-build-isolation
+		popd
+		deactivate
 		;;
 	vllm)
 		echo "Running vllm logic..."
+		if [ ! -d "playground/infer/venv/vllm" ]; then
+			pushd playground/infer/venv
+			python3 -m venv vllm
+			popd
+		fi
+		source playground/infer/venv/vllm/bin/activate
+		pushd playground/infer/vllm
+		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		VLLM_USE_PRECOMPILED=1 pip install --editable .
+		popd
+		deactivate
 		;;
 	*)
 		echo "Invalid argument: $1"
-		echo "Usage: $0 {deps|cuda|linux|driver|examples|llama.cpp|llamafactory|vllm}"
+		echo "Usage: $0 {deps|cuda|linux|driver|examples|llama.cpp|diffusion|llamafactory|vllm}"
 		exit 1
 		;;
 esac
