@@ -18,3 +18,4 @@ playground/train/venv/*
 cuda/*
 !cuda/.gitkeep
 
+/plots/GCgroupFigureVenv
