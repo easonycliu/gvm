@@ -8,10 +8,9 @@
 __global__ void quick_kernel() {
 	float acc = threadIdx.x;
     #pragma unroll 100
-    for (std::size_t i = 0; i < 10000000000; ++i) {
+    for (std::size_t i = 0; i < 10000000; ++i) {
         acc = sinf(acc) * cosf(acc) + acc;
     }
-	printf("Thread %d finished computation\n", threadIdx.x);
 }
 
 int main() {

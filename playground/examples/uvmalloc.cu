@@ -363,6 +363,9 @@ __global__ void touch_kernel(volatile int *stop_flag, volatile char *dummy, std:
 		for (std::size_t i = start_index; i < end_index; ++i) {
     	    (reinterpret_cast<char *>(reinterpret_cast<std::uintptr_t>(dummy) + i))[0] = 1;
     	}
+		if (global_id == 0) {
+			printf("Finished one round touch\n");
+		}
 	}
 }
 

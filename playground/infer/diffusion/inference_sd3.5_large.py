@@ -3,8 +3,17 @@ import argparse
 from pathlib import Path
 from typing import List
 from diffusers import StableDiffusion3Pipeline
+from datetime import datetime
 import os
+import json
+import time
+import signal
 
+siguser1_timestamp = []
+
+def siguser1_handler(signo, frame):
+    global siguser1_timestamp
+    siguser1_timestamp.append(time.time())
 
 class SDConfig:
 
@@ -45,19 +54,26 @@ def generate_images(
     pipe: StableDiffusion3Pipeline,
     prompts: List[str],
     config: SDConfig,
-) -> List[torch.Tensor]:
+) -> (List[torch.Tensor], List[int]):
     """Generate images from a list of prompts."""
     try:
         if len(prompts) < config.batch_size:
             prompts = prompts * (config.batch_size // len(prompts)
                                  ) + prompts[:config.batch_size % len(prompts)]
         prompts = prompts[:config.batch_size]
-        images = pipe(
-            prompt=prompts,
-            num_inference_steps=config.num_inference_steps,
-            guidance_scale=config.guidance_scale,
-        ).images
-        return images
+        timestep = [time.time()]
+        def f(_1, _2, _3, args):
+            timestep.append(time.time())
+            return args
+        pipe.scheduler.set_timesteps(num_inference_steps=config.num_inference_steps, device=pipe.device)
+        for i in range(30):
+            images = pipe(
+                prompt=prompts,
+                num_inference_steps=config.num_inference_steps,
+                guidance_scale=config.guidance_scale,
+                callback_on_step_end=f
+            ).images
+        return images, timestep
     except Exception as e:
         raise RuntimeError(f"Failed to generate images: {str(e)}")
 
@@ -92,7 +108,7 @@ def main():
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
         output_dir=args.output_dir,
-		torch_dtype=torch.float16,
+        torch_dtype=torch.float16,
     )
 
     prompts = [
@@ -100,7 +116,12 @@ def main():
         "A beautiful sunset over a mountain landscape",
         "A futuristic city with flying cars",
     ]
+    results = {
+        "steps": args.num_inference_steps
+    }
 
+    start_infer_time = datetime.now()
+    timestep = None
     pipe = create_pipe(config)
     if args.enable_memory_profiling:
         torch.cuda.memory._record_memory_history(max_entries=100000)
@@ -109,17 +130,26 @@ def main():
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
         ]) as prof:
-            images = generate_images(pipe, prompts, config)
+            images, timestep = generate_images(pipe, prompts, config)
         prof.export_chrome_trace("sd_mem_profile.json")
 
         torch.cuda.memory._dump_snapshot("sd_mem_profile.pkl")
         torch.cuda.memory._record_memory_history(enabled=None)
     else:
-        images = generate_images(pipe, prompts, config)
+        images, timestep = generate_images(pipe, prompts, config)
+    end_infer_time = datetime.now()
+    results["duration"] = (end_infer_time - start_infer_time).seconds
+    results["iter_per_second"] = results["steps"] / results["duration"]
+    results["step_timestamp"] = timestep
+    results["interference_timestamp"] = siguser1_timestamp
+
+    with open(os.path.join(args.output_dir, "{}.json".format(datetime.now().strftime("%m%d%Y-%H%M%S"))), "w") as f:
+        json.dump(results, f, indent=4)
 
     if args.save_images:
         save_images(images, config)
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGUSR1, siguser1_handler)
     main()

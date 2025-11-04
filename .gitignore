@@ -8,6 +8,11 @@ syscall.trace
 models
 cuda_deb
 
+/multithreadbm*
+/test*
+
+/setup
+
 playground/examples/*
 !playground/examples/*.cu
 playground/infer/venv/*
@@ -19,3 +24,10 @@ cuda/*
 !cuda/.gitkeep
 
 /plots/GCgroupFigureVenv
+/3rdparty
+/exp/vllm+diffusion/diffusion_outputs
+/exp/vllm+llama-factory/data
+/exp/vllm+llama-factory/saves
+/fig
+/scripts
+/playground/infer/diffusion/outputs

@@ -1,5 +1,5 @@
 ### model
-model_name_or_path: meta-llama/Meta-Llama-3-8B-Instruct
+model_name_or_path: meta-llama/Llama-3.2-3B
 trust_remote_code: true
 
 ### method
@@ -13,7 +13,7 @@ lora_target: all
 dataset: identity,alpaca_en_demo
 template: llama3
 cutoff_len: 2048
-max_samples: 100
+max_samples: 2048
 overwrite_cache: true
 preprocessing_num_workers: 16
 dataloader_num_workers: 4
@@ -28,10 +28,10 @@ save_only_model: false
 report_to: none  # choices: [none, wandb, tensorboard, swanlab, mlflow]
 
 ### train
-per_device_train_batch_size: 1
+per_device_train_batch_size: 16
 gradient_accumulation_steps: 8
 learning_rate: 1.0e-4
-num_train_epochs: 1.0
+num_train_epochs: 8.0
 lr_scheduler_type: cosine
 warmup_ratio: 0.1
 bf16: true
