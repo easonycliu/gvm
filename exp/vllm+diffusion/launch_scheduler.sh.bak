@@ -20,28 +20,34 @@ function reschedule() {
 	fi
 }
 
-lc_pid=
-be_pid=
+listening_port=
+preempt_pid=
 for flag in "$@"; do
 	case $flag in
-		--lc_pid=*)
-			lc_pid=$(echo $flag | awk -F = '{print $2}')
+		--listening_port=*)
+			listening_port=$(echo $flag | awk -F = '{print $2}')
 			;;
-		--be_pid=*)
-			be_pid=$(echo $flag | awk -F = '{print $2}')
+		--preempt_pid=*)
+			preempt_pid=$(echo $flag | awk -F = '{print $2}')
 			;;
 		*)
 			echo "Unknown command-line flag" $flag
 	esac
 done
 
-if [ "${lc_pid}" == "" -o "${be_pid}" == "" ]; then
-	echo "Usage: ./launch_scheduler.sh --lc_pid=<pid> --be_pid=<pid>"
+if [ "${listening_port}" == "" -o "${preempt_pid}" == "" ]; then
+	echo "Usage: ./launch_scheduler.sh --listening_port=<port> --preempt_pid=<pid>"
 	exit
 fi
 
+logfile=$(mktemp)
+sudo tcpdump -l -i lo port $listening_port 2>&1 | grep --line-buffered "localhost.$listening_port:.*sackOK,TS" >$logfile &
+tcpdump_pid=$!
+trap 'echo "Cleaning up"; kill "$tcpdump_pid"; rm "$logfile"; exit' SIGINT
+request_num=0
 preempted=false
 while sleep 1; do
+	new_request_num=$(wc -l < "$logfile")
 	increased_request_num=$((new_request_num - request_num))
 	echo "Incoming requests: $increased_request_num"
 	if [ "${increased_request_num}" -gt 15 ]; then

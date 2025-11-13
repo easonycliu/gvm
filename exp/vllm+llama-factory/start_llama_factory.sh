@@ -77,9 +77,9 @@ elif [ "$method" == "UVM" ]; then
 	source $project_dir/playground/train/venv/LLaMA-Factory/bin/activate
 	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" llamafactory-cli train $script_dir/llama3_lora_sft.yaml &
 elif [ "$method" == "MIG" ]; then
-	source $project_dir/playground/infer/venv/diffusion/bin/activate
+	source $project_dir/playground/train/venv/LLaMA-Factory/bin/activate
 	export CUDA_VISIBLE_DEVICES=$device
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
+	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" llamafactory-cli train $script_dir/llama3_lora_sft.yaml &
 else
 	echo "Unknown method: $method"
 	exit

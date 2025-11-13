@@ -88,8 +88,8 @@ else
 	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" &
 	server_script_pid=$!
 	sleep 60
-	#./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method &
-	#preempt_script_pid=$!
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method &
+	preempt_script_pid=$!
 fi
 
 echo "Waiting for system startup"
