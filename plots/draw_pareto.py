@@ -22,15 +22,23 @@ def calculate_metric(application, filepath, slo):
 
         average_output_tokens = data["total_output_tokens"] // data["completed"]
 
-        for itl in data["itls"]:
-            if len(itl) == 0:
-                total_tokens += average_output_tokens
-                continue
-
-            for latency in itl:
-                if latency <= slo:
-                    slo_satisfied_tokens += 1
+        for latency in data["ttfts"]:
+            if latency == 0.0:
                 total_tokens += 1
+                continue
+            if latency <= slo:
+                slo_satisfied_tokens += 1
+            total_tokens += 1
+
+        # for itl in data["itls"]:
+        #     if len(itl) == 0:
+        #         total_tokens += average_output_tokens
+        #         continue
+
+        #     for latency in itl:
+        #         if latency <= slo:
+        #             slo_satisfied_tokens += 1
+        #         total_tokens += 1
 
         return slo_satisfied_tokens / np.max([total_tokens, 1])
     elif application == "diffusion":
@@ -84,7 +92,7 @@ if __name__ == "__main__":
 
     # Categorize methods by system
     def get_system(method):
-        if method.startswith('GVM'):
+        if method.startswith('GVM') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
             return 'GVM'
         elif method == 'TGS':
             return 'TGS'
@@ -148,6 +156,9 @@ if __name__ == "__main__":
                 sorted_indices = sorted(range(len(system_x_percent)), key=lambda i: system_x_percent[i])
                 sorted_x = [system_x_percent[i] for i in sorted_indices]
                 sorted_y = [system_y[i] for i in sorted_indices]
+                print(sorted_indices)
+                print(sorted_x)
+                print(sorted_y)
                 plt.plot(sorted_x, sorted_y, color=methods_color_map[system],
                         linestyle='-', linewidth=2, alpha=0.6)
 

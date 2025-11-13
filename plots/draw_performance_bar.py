@@ -9,7 +9,7 @@ from matplotlib.lines import Line2D
 # Global Configuration
 FONT_SIZE = 15
 FIGURE_SIZE = (14, 2.8)
-METHODS_ORDER = ['TGS', 'GPreempt', 'xsched', 'GVM', 'exclusive']
+METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'exclusive']
 HATCH_PATTERNS = ['/', '\\', 'x', 'o']
 VLLM_SPACING_REDUCTION = 0.65  # Reduce vLLM subplot gaps to 65% of original
 MIN_SUBPLOT_GAP = 0.015  # Minimum gap to avoid text overlap
@@ -17,6 +17,7 @@ SHOW_LEGEND = True
 
 # Color Configuration
 METHOD_COLORS = {
+	'MIG': 'tab:red',
     'TGS': 'tab:blue',
     'GPreempt': 'tab:orange',
     'xsched': 'tab:green',
@@ -29,8 +30,8 @@ EXCLUSIVE_LINE_WIDTH = 3
 
 # vLLM metrics: (source_key, display_label, scale_factor, use_log_scale)
 VLLM_METRICS = [
-    ('Median TTFT (ms)', 'Median TTFT (s)', 0.001, True),
-    ('P99 TTFT (ms)', 'P99 TTFT (s)', 0.001, True),
+    ('Median TTFT (ms)', 'Median TTFT (ms)', 1.0, False),
+    ('P99 TTFT (ms)', 'P99 TTFT (ms)', 1.0, False),
     ('Median ITL (ms)', 'Median ITL (ms)', 1.0, False),
     ('P99 ITL (ms)', 'P99 ITL (ms)', 1.0, False),
 ]
@@ -166,17 +167,13 @@ def main():
             ax.set_ylim(bottom=min_val * 0.1)  # Start at 10% of minimum value (near 0)
         else:
             ax.set_ylim(bottom=0)  # Linear scale starts at 0
-            # Cap P99 ITL y-axis at 650 only if any values exceed it
-            if src_key == 'P99 ITL (ms)':
-                max_val = max(values + ([exclusive_val] if exclusive_val is not None else []))
-                if max_val > 650:
-                    ax.set_ylim(top=650)
-                    # Add text labels for bars exceeding 650
-                    for bar, value in zip(bars, values):
-                        if value > 650:
-                            ax.text(bar.get_x() + bar.get_width() / 2, 650,
-                                   f'{value:.0f}', ha='center', va='bottom',
-                                   fontsize=FONT_SIZE - 1, color='tab:red')
+            second_max_val = sorted(values + ([exclusive_val] if exclusive_val is not None else []))[-2]
+            ax.set_ylim(top=second_max_val * 1.2)
+            for bar, value in zip(bars, values):
+                if value > second_max_val * 1.2:
+                    ax.text(bar.get_x() + bar.get_width() / 2, second_max_val * 1.2,
+                           f'{value:.0f}', ha='center', va='bottom',
+                           fontsize=FONT_SIZE - 1, color='tab:red')
         ax.set_ylabel(display_label)
         ax.set_xticks([])
 
@@ -235,7 +232,7 @@ def main():
                    ncol=len(legend_handles), frameon=False)
 
     # Save plot
-    filename = f"{'+'.join(applications)}_{args.output}.pdf"
+    filename = os.path.join(args.output, f"{'+'.join(applications)}_performance_bar.pdf")
     fig.savefig(filename, bbox_inches='tight')
 
 if __name__ == "__main__":

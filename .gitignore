@@ -31,3 +31,5 @@ cuda/*
 /fig
 /scripts
 /playground/infer/diffusion/outputs
+
+*.bak
