@@ -1,6 +1,6 @@
 [submodule "open-gpu-kernel-modules"]
 	path = open-gpu-kernel-modules
-	url = git@github.com:easonycliu/PFScheOpenGPUKernelModules.git
+	url = git@github.com:ivanium/gvm-nvidia-driver-modules.git
 [submodule "cuda_custom"]
 	path = cuda_custom
 	url = git@github.com:easonycliu/CUDADriverCustom.git
