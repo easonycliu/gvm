@@ -3,7 +3,7 @@
 	url = git@github.com:easonycliu/PFScheOpenGPUKernelModules.git
 [submodule "cuda_custom"]
 	path = cuda_custom
-	url = git@github.com:ivanium/gvm-dev.git
+	url = git@github.com:easonycliu/CUDADriverCustom.git
 [submodule "cuda"]
 	path = cuda
 	url = https://github.com/easonycliu/cuda12.9-driver575.57.08.git
@@ -15,7 +15,7 @@
 	url = git@github.com:easonycliu/GCGroupLlama.cpp.git
 [submodule "vllm"]
 	path = playground/infer/vllm
-	url = 
+	url = git@github.com:easonycliu/GVMvllm.git
 [submodule "LLaMA-Factory"]
 	path = playground/train/LLaMA-Factory
-	url = git@github.com:hiyouga/LLaMA-Factory.git
+	url = git@github.com:easonycliu/GVMLLaMA-Factory.git
