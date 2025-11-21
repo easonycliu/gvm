@@ -93,7 +93,7 @@ else
 fi
 
 echo "Waiting for system startup"
-sleep 60
+sleep 90
 
 ./start_vllm_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
