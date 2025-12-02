@@ -19,3 +19,12 @@
 [submodule "LLaMA-Factory"]
 	path = playground/train/LLaMA-Factory
 	url = git@github.com:easonycliu/GVMLLaMA-Factory.git
+[submodule "GPreempt"]
+	path = 3rdparty/GPreempt
+	url = git@github.com:easonycliu/GVMGPreempt.git
+[submodule "TGS"]
+	path = 3rdparty/TGS
+	url = git@github.com:easonycliu/GVMTGS.git
+[submodule "xsched"]
+	path = 3rdparty/GPreempt
+	url = git@github.com:easonycliu/GVMXsched.git

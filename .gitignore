@@ -24,7 +24,8 @@ cuda/*
 !cuda/.gitkeep
 
 /plots/GCgroupFigureVenv
-/3rdparty
+/3rdparty/gdrcopy
+/3rdparty/TGSVenv
 /exp/vllm+diffusion/diffusion_outputs
 /exp/vllm+llama-factory/data
 /exp/vllm+llama-factory/saves
