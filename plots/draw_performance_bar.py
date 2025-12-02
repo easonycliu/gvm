@@ -9,7 +9,7 @@ from matplotlib.lines import Line2D
 # Global Configuration
 FONT_SIZE = 15
 FIGURE_SIZE = (14, 2.8)
-METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'exclusive']
+METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'exclusive']
 HATCH_PATTERNS = ['/', '\\', 'x', 'o']
 VLLM_SPACING_REDUCTION = 0.65  # Reduce vLLM subplot gaps to 65% of original
 MIN_SUBPLOT_GAP = 0.015  # Minimum gap to avoid text overlap
@@ -17,11 +17,12 @@ SHOW_LEGEND = True
 
 # Color Configuration
 METHOD_COLORS = {
-	'MIG': 'tab:red',
+    'MIG': 'tab:cyan',
     'TGS': 'tab:blue',
     'GPreempt': 'tab:orange',
     'xsched': 'tab:green',
     'GVM': 'tab:purple',
+    'GVMDYN': 'tab:pink',
     'exclusive': 'tab:red'
 }
 EXCLUSIVE_LINE_COLOR = 'tab:red'

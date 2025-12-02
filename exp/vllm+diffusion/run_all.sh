@@ -93,7 +93,7 @@ else
 fi
 
 echo "Waiting for system startup"
-sleep 60
+sleep 90
 
 ./start_vllm_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
@@ -109,7 +109,8 @@ preempt_pid=$(cat $preempt_pid_file)
 rm -f $preempt_pid_file
 
 if [ "$method" == "GVM" ]; then
-    ./launch_scheduler.sh --listening_port=8000 --preempt_pid=$preempt_pid &
+    # ./launch_scheduler.sh --listening_port=8000 --preempt_pid=$preempt_pid &
+	sudo ./launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit -1 --bememlimit 6000000000 &
 	scheduler_pid=$!
 fi
 

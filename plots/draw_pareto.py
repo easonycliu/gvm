@@ -79,7 +79,8 @@ if __name__ == "__main__":
         'TGS': palette[0],
         'GPreempt': palette[1],
         'xsched': palette[2],
-        'GVM': 'tab:purple'
+        'GVM': 'tab:purple',
+        'GVMDYN': 'tab:pink'
     }
 
     # Define markers for different systems
@@ -87,13 +88,19 @@ if __name__ == "__main__":
         'TGS': 'o',
         'GPreempt': 's',
         'xsched': '^',
-        'GVM': 'D'
+        'GVM': 'D',
+        'GVMDYN': 'D'
     }
 
     # Categorize methods by system
     def get_system(method):
-        if method.startswith('GVM') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
+        print(method)
+        if method.startswith('GVM') and not method.startswith('GVMDYN') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
+            print('GVM')
             return 'GVM'
+        elif method.startswith('GVMDYN'):
+            print('GVMDYN')
+            return 'GVMDYN'
         elif method == 'TGS':
             return 'TGS'
         elif method == 'GPreempt':
@@ -133,13 +140,14 @@ if __name__ == "__main__":
     # Plot points grouped by system with different colors and markers
     legend_handles = []
     # Define legend order to match bar chart (excluding exclusive)
-    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM']
+    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN']
 
     for system in legend_order:
         if system in system_groups and system in methods_color_map:
             methods = system_groups[system]
             system_x = [results["vllm"][method] for method in methods]
             system_y = [results["diffusion"][method] / diffusion_exclusive_baseline for method in methods] if diffusion_exclusive_baseline is not None else [results["diffusion"][method] for method in methods]
+            print("System {} x {} y {}".format(methods, system_x, system_y))
 
             # Convert x values to percentage scale (multiply by 100)
             system_x_percent = [x * 100 for x in system_x]
@@ -190,7 +198,7 @@ if __name__ == "__main__":
 
 
     # Add legend
-    plt.legend(handles=legend_handles, loc=(0.48, .65), frameon=False,fontsize=14)
+    plt.legend(handles=legend_handles, loc=(0.48, .55), frameon=False,fontsize=14)
     plt.tight_layout()
 
     plt.savefig(os.path.join(args.output, "{}_pareto.pdf".format("+".join(applications))))
