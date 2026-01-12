@@ -74,11 +74,11 @@ elif [ "$method" == "xsched" ]; then
 	python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 elif [ "$method" == "MIG" ]; then
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
 	export CUDA_VISIBLE_DEVICES=$device
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 else
 	echo "Unknown method: $method"
 	exit
