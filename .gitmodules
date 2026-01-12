@@ -28,3 +28,6 @@
 [submodule "xsched"]
 	path = 3rdparty/GPreempt
 	url = git@github.com:easonycliu/GVMXsched.git
+[submodule "sglang"]
+	path = playground/infer/sglang
+	url = git@github.com:sgl-project/sglang.git
