@@ -8,9 +8,9 @@ from matplotlib.lines import Line2D
 
 # Global Configuration
 FONT_SIZE = 15
-FIGURE_SIZE = (14, 3.3)
-#METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'Ghost', 'exclusive']
-METHODS_ORDER = ['TGS', 'GPreempt', 'xsched', 'Ghost', 'GhostDYN', 'exclusive']
+FIGURE_SIZE = (14, 2.8)
+#METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'exclusive']
+METHODS_ORDER = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'exclusive']
 HATCH_PATTERNS = ['/', '\\', 'x', 'o']
 VLLM_SPACING_REDUCTION = 0.65  # Reduce vLLM subplot gaps to 65% of original
 MIN_SUBPLOT_GAP = 0.015  # Minimum gap to avoid text overlap
@@ -18,12 +18,12 @@ SHOW_LEGEND = True
 
 # Color Configuration
 METHOD_COLORS = {
-    'MIG': 'tab:cyan',
+#    'MIG': 'tab:cyan',
     'TGS': 'tab:blue',
     'GPreempt': 'tab:orange',
     'xsched': 'tab:green',
-    'Ghost': 'tab:purple',
-    'GhostDYN': 'tab:pink',
+    'GVM': 'tab:purple',
+    'GVMDYN': 'tab:pink',
     'exclusive': 'tab:red'
 }
 EXCLUSIVE_LINE_COLOR = 'tab:red'
@@ -153,7 +153,7 @@ def main():
         ax = fig.add_subplot(1, 5, i)
         actual_src_key = 'xsched' if src_key == 'XSched' else src_key
 
-        values = [results['vllm']["GVM" + method[5:] if method.startswith("Ghost") else method][actual_src_key] * scale for method in bar_methods]
+        values = [results['vllm'][method][actual_src_key] * scale for method in bar_methods]
         bars = create_bar_plot(ax, values, bar_methods, color_map, hatch_map)
 
         # Add exclusive line
@@ -169,19 +169,19 @@ def main():
             ax.set_ylim(bottom=min_val * 0.1)  # Start at 10% of minimum value (near 0)
         else:
             ax.set_ylim(bottom=0)  # Linear scale starts at 0
-            second_max_val = sorted(values + ([exclusive_val] if exclusive_val is not None else []))[-4]
-            ax.set_ylim(top=second_max_val * 3)
+            second_max_val = sorted(values + ([exclusive_val] if exclusive_val is not None else []))[-3]
+            ax.set_ylim(top=second_max_val * 1.5)
             for bar, value in zip(bars, values):
-                if value > second_max_val * 3:
-                    ax.text(bar.get_x() + bar.get_width() / 2, second_max_val * 3,
+                if value > second_max_val * 1.5:
+                    ax.text(bar.get_x() + bar.get_width() / 2, second_max_val * 1.5,
                            f'{value:.0f}', ha='center', va='bottom',
-                           fontsize=FONT_SIZE - 5, color='tab:red', rotation=90)
+                           fontsize=FONT_SIZE - 5, color='tab:red')
         ax.set_ylabel(display_label)
         ax.set_xticks([])
 
     # Plot throughput metric (subplot 5) - separate group with spacing
     ax = fig.add_subplot(1, 5, 5)
-    latencies = [results[applications[1]]["GVM" + method[5:] if method.startswith("Ghost") else method]['latency'] for method in bar_methods]
+    latencies = [results[applications[1]][method]['latency'] for method in bar_methods]
     exclusive_latency = (results[applications[1]]['exclusive']['latency']
                         if 'exclusive' in results[applications[1]] else None)
 
@@ -230,7 +230,7 @@ def main():
                                 linewidth=EXCLUSIVE_LINE_WIDTH, label='Exclusive'))
 
     if SHOW_LEGEND:
-        fig.legend(handles=legend_handles, loc=(0.13, 0.88),
+        fig.legend(handles=legend_handles, loc=(0.23, 0.88),
                    ncol=len(legend_handles), frameon=False)
 
     # Save plot

@@ -79,8 +79,8 @@ if __name__ == "__main__":
         'TGS': palette[0],
         'GPreempt': palette[1],
         'xsched': palette[2],
-        'Ghost': 'tab:purple',
-        'GhostDYN': 'tab:pink'
+        'GVM': 'tab:purple',
+        'GVMDYN': 'tab:pink'
     }
 
     # Define markers for different systems
@@ -88,19 +88,19 @@ if __name__ == "__main__":
         'TGS': 'o',
         'GPreempt': 's',
         'xsched': '^',
-        'Ghost': 'D',
-        'GhostDYN': 'D'
+        'GVM': 'D',
+        'GVMDYN': 'D'
     }
 
     # Categorize methods by system
     def get_system(method):
         print(method)
         if method.startswith('GVM') and not method.startswith('GVMDYN') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
-            print('Ghost')
-            return 'Ghost'
+            print('GVM')
+            return 'GVM'
         elif method.startswith('GVMDYN'):
-            print('GhostDYN')
-            return 'GhostDYN'
+            print('GVMDYN')
+            return 'GVMDYN'
         elif method == 'TGS':
             return 'TGS'
         elif method == 'GPreempt':
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     # Plot points grouped by system with different colors and markers
     legend_handles = []
     # Define legend order to match bar chart (excluding exclusive)
-    legend_order = ['TGS', 'GPreempt', 'xsched', 'Ghost', 'GhostDYN']
+    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN']
 
     for system in legend_order:
         if system in system_groups and system in methods_color_map:
@@ -158,8 +158,8 @@ if __name__ == "__main__":
                        marker=methods_marker_map[system],
                        s=80, alpha=0.8, edgecolors='black', linewidth=1)
 
-            # Connect Ghost dots with a line
-            if system == 'Ghost' and len(system_x_percent) > 1:
+            # Connect GVM dots with a line
+            if system == 'GVM' and len(system_x_percent) > 1:
                 # Sort points by x-coordinate to create a proper line
                 sorted_indices = sorted(range(len(system_x_percent)), key=lambda i: system_x_percent[i])
                 sorted_x = [system_x_percent[i] for i in sorted_indices]
@@ -176,14 +176,14 @@ if __name__ == "__main__":
                                        linestyle='None', markersize=8,
                                        label=system if system != 'xsched' else 'XSched'))
 
-    # # Label each point (simplified labels for Ghost)
+    # # Label each point (simplified labels for GVM)
     # for i, k in enumerate(keys):
     #     display_label = k
-    #     if k.startswith('Ghost'):
-    #         # Extract the configuration part (e.g., "2-10" from "Ghost-2-10")
+    #     if k.startswith('GVM'):
+    #         # Extract the configuration part (e.g., "2-10" from "GVM-2-10")
     #         parts = k.split('-')
     #         if len(parts) >= 3:
-    #             display_label = f"Ghost-{parts[1]}-{parts[2]}"
+    #             display_label = f"GVM-{parts[1]}-{parts[2]}"
     #     elif k == "xsched":
     #         display_label = "XSched"
 
