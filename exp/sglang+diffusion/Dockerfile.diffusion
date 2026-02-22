@@ -1,0 +1,20 @@
+ARG CUDA_VERSION=12.9.1
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    CUDA_HOME=/usr/local/cuda
+ENV PATH="${PATH}:/usr/local/nvidia/bin" \
+    LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
+
+RUN apt update && apt install -y software-properties-common wget \
+    && add-apt-repository ppa:deadsnakes/ppa -y \
+    && apt install -y python3.12-full python3.12-dev \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --set python3 /usr/bin/python3.12 \
+    && wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install torch==2.9.1 --extra-index-url https://download.pytorch.org/whl/cu129 \
+    && pip install diffusers transformers accelerate sentencepiece protobuf
