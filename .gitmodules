@@ -30,4 +30,4 @@
 	url = git@github.com:easonycliu/GVMXsched.git
 [submodule "sglang"]
 	path = playground/infer/sglang
-	url = git@github.com:sgl-project/sglang.git
+	url = https://github.com/zyt600/GVMsglang.git
