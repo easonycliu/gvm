@@ -26,7 +26,7 @@
 	path = 3rdparty/TGS
 	url = git@github.com:easonycliu/GVMTGS.git
 [submodule "xsched"]
-	path = 3rdparty/GPreempt
+	path = 3rdparty/xsched
 	url = git@github.com:easonycliu/GVMXsched.git
 [submodule "sglang"]
 	path = playground/infer/sglang
