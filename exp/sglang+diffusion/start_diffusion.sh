@@ -56,11 +56,12 @@ elif [ "$method" == "GPreempt" ]; then
 elif [ "$method" == "TGS" ]; then
 	docker run --rm --name job_1 --gpus "device=0" --ipc host --network host --cap-add sys_nice -u root --cpuset-cpus 0-5 -v $project_dir/playground/infer/diffusion:/diffusion -v $project_dir/playground/train/LLaMA-Factory:/LLaMA-Factory -v $script_dir:/exp -v ~/.cache/huggingface:/root/.cache/huggingface -v $project_dir/3rdparty/TGS:/cluster -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcontroller.so:/libcontroller.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so:/libcuda.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so.1:/libcuda.so.1:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so:/libnvidia-ml.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so.1:/libnvidia-ml.so.1:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/ld.so.preload:/etc/ld.so.preload:ro -v $project_dir/3rdparty/TGS/gsharing:/etc/gsharing -e TGS_WORKER_IP=10.128.0.122 -e TGS_WORKER_PORT=6889 -e TGS_TRAINER_PORT=47123 -e TGS_JOB_ID=1 -e CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps -e GPU_CONFIG_FILE=/gpu_config.json -e GPU_STATUS_FILE=/gpu_status.json easonliu12138/gvm_cuda_12_9 python3 /exp/diffusion.py --dataset_path /exp/vidprom.txt --log_file /exp/diffusion_outputs/stats-$(date +%Y%m%d-%H%M%S).txt &
 elif [ "$method" == "xsched" ]; then
-	if [ -z "$(ps -a | grep -e "xserver$")" ]; then
+	if ! pgrep -x xserver > /dev/null; then
 		echo "Please launch xsched server before start application with xsched"
 		exit;
 	fi
 
+	export XLOG_LEVEL=INFO
 	export XSCHED_POLICY=GBL
 	export XSCHED_ENABLE_MANAGED=ON
 	export XSCHED_AUTO_XQUEUE=ON
@@ -74,11 +75,11 @@ elif [ "$method" == "xsched" ]; then
 	python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 elif [ "$method" == "MIG" ]; then
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
 	export CUDA_VISIBLE_DEVICES=$device
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 else
 	echo "Unknown method: $method"
 	exit
@@ -95,5 +96,5 @@ elif [ "$method" == "GPreempt" ]; then
 	./setup_cgroup.sh --priority=15 --memlimit=400000000000 --rootpid=$rootpid
 fi
 
-trap 'wait $rootpid; exit' INT
+trap 'kill -2 $rootpid; wait $rootpid; exit' INT
 wait $rootpid
