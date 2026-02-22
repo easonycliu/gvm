@@ -44,9 +44,9 @@ fi
 echo "Running burstgpt"
 source $project_dir/playground/infer/venv/vllm/bin/activate
 set -x
-python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend sglang --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --request-rate 4 --burstiness 1 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log --port 30000 &
+python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
 
-# python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend sglang --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log --port 30000 &
+# python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log
 
 rootpid=$!
 if [ -n $pidfile ]; then
