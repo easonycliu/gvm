@@ -73,7 +73,6 @@ elif [ "$method" == "xsched" ]; then
 	fi
 
 	export XLOG_LEVEL=INFO
-
 	export XSCHED_POLICY=GBL
 	export XSCHED_ENABLE_MANAGED=ON
 	export XSCHED_AUTO_XQUEUE=ON
