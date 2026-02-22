@@ -95,7 +95,7 @@ fi
 echo "Waiting for system startup"
 sleep 90
 
-./start_sglang_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
+./start_vllm_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
 
 while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
