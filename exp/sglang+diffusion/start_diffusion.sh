@@ -71,7 +71,7 @@ elif [ "$method" == "xsched" ]; then
 	export LD_LIBRARY_PATH=$project_dir/3rdparty/xsched/output/lib:$LD_LIBRARY_PATH
 
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
-	python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt
+	python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/playground/infer/venv/diffusion/bin/activate
 	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" python3 diffusion.py --dataset_path vidprom.txt --log_file stats-$(date +%Y%m%d-%H%M%S).txt &
