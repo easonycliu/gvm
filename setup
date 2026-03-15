@@ -2,7 +2,7 @@
 
 # Check argument count
 if [ "$#" -ne 1 ]; then
-	echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|diffusion|llamafactory|vllm}"
+	echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|diffusion|llamafactory|vllm|sglang}"
 	exit 1
 fi
 
@@ -115,13 +115,30 @@ case "$1" in
 		source playground/infer/venv/vllm/bin/activate
 		pushd playground/infer/vllm
 		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		pip3 install "transformers==4.53.2" "tokenizers==0.21.1"
 		VLLM_USE_PRECOMPILED=1 pip install --editable .
+		pip3 install pandas
+		pip3 install datasets
+		popd
+		deactivate
+		;;
+	sglang)
+		echo "Running sglang logic..."
+		if [ ! -d "playground/infer/venv/sglang" ]; then
+			pushd playground/infer/venv
+			python3 -m venv sglang
+			popd
+		fi
+		source playground/infer/venv/sglang/bin/activate
+		pushd playground/infer/sglang/python
+		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		pip3 install --editable .
 		popd
 		deactivate
 		;;
 	*)
 		echo "Invalid argument: $1"
-		echo "Usage: $0 {deps|cuda|linux|driver|examples|llama.cpp|diffusion|llamafactory|vllm}"
+		echo "Usage: $0 {deps|cuda|linux|cuda_custom|driver|examples|llama.cpp|diffusion|llamafactory|vllm|sglang}"
 		exit 1
 		;;
 esac

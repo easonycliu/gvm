@@ -73,10 +73,10 @@ preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
 if [ "$method" == "GVM" ]; then
-	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --memlimit=60000000000 --priority=$lcpriority &
+	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --memlimit=25000000000 --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=40000000000 --priority=$bepriority &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=20000000000 --priority=$bepriority &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
 	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --device=$lcdevice &
@@ -95,7 +95,7 @@ fi
 echo "Waiting for system startup"
 sleep 90
 
-./start_sglang_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
+./start_vllm_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
 
 while [ ! -s "$server_pid_file" ]; do sleep 0.5; done

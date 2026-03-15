@@ -59,7 +59,7 @@ def reschedule(pid):
 
 def set_mem_limit(pid, limit):
 	print("Set {}'s memory limit to {}".format(pid, limit))
-	with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "memory.limit"), "w") as f:
+	with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "memory.limit.high"), "w") as f:
 		f.write("{}\n".format(limit))
 
 def get_gcgroup_stat(pid):
