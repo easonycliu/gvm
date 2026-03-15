@@ -110,7 +110,7 @@ if [ -n $pidfile ]; then
 fi
 
 if [ "$method" == "GVM" ]; then
-	echo $memlimit | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$vllm_active_process/0/memory.limit
+	echo $memlimit | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$vllm_active_process/0/memory.limit.high
 	echo $priority | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$vllm_active_process/0/compute.priority
 	echo "Setup cgroup for pid $vllm_active_process, memory limit: $memlimit, priority: $priority"
 elif [ "$method" == "GPreempt" ]; then
