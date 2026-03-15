@@ -115,8 +115,10 @@ case "$1" in
 		source playground/infer/venv/vllm/bin/activate
 		pushd playground/infer/vllm
 		pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129
+		pip3 install "transformers==4.53.2" "tokenizers==0.21.1"
 		VLLM_USE_PRECOMPILED=1 pip install --editable .
 		pip3 install pandas
+		pip3 install datasets
 		popd
 		deactivate
 		;;
