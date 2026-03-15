@@ -73,10 +73,10 @@ preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
 if [ "$method" == "GVM" ]; then
-	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --memlimit=60000000000 --priority=$lcpriority &
+	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --memlimit=25000000000 --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=40000000000 --priority=$bepriority &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=20000000000 --priority=$bepriority &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
 	./start_sglang_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --device=$lcdevice &
