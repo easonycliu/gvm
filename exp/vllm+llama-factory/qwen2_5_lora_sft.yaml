@@ -1,6 +1,10 @@
 ### model
-model_name_or_path: meta-llama/Llama-3.2-3B
+model_name_or_path: Qwen/Qwen2.5-VL-3B-Instruct
 trust_remote_code: true
+image_max_pixels: 200704
+video_max_pixels: 65536
+video_fps: 1.0
+video_maxlen: 16
 
 ### method
 stage: sft
@@ -10,16 +14,16 @@ lora_rank: 8
 lora_target: all
 
 ### dataset
-dataset: identity,alpaca_en_demo
-template: llama3
-cutoff_len: 2048
+dataset: mmvu_64
+template: qwen2_vl
+cutoff_len: 8192
 max_samples: 2048
 overwrite_cache: true
 preprocessing_num_workers: 16
 dataloader_num_workers: 4
 
 ### output
-output_dir: saves/llama3.2-3b
+output_dir: saves/Qwen2.5-VL-3B-Instruct
 logging_steps: 1
 save_steps: 500
 plot_loss: true
@@ -28,7 +32,7 @@ save_only_model: false
 report_to: none  # choices: [none, wandb, tensorboard, swanlab, mlflow]
 
 ### train
-per_device_train_batch_size: 8
+per_device_train_batch_size: 4
 gradient_accumulation_steps: 8
 learning_rate: 1.0e-4
 num_train_epochs: 8.0
