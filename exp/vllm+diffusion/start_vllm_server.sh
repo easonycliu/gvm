@@ -60,10 +60,10 @@ fi
 
 if [ "$method" == "GVM" ]; then
 	source $project_dir/playground/infer/venv/vllm/bin/activate
-	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH vllm serve $model $param &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom/install:$LD_LIBRARY_PATH vllm serve $model $param &
 elif [ "$method" == "GPreempt" ]; then
 	source $project_dir/playground/infer/venv/vllm/bin/activate
-	LD_LIBRARY_PATH=$project_dir/cuda_custom:$LD_LIBRARY_PATH vllm serve $model $param &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom/install:$LD_LIBRARY_PATH vllm serve $model $param &
 elif [ "$method" == "TGS" ]; then
 	docker run --rm --name job_2 --gpus "device=0" --ipc host --network host --cap-add sys_nice -u root --cpuset-cpus 0-5 -v $project_dir/3rdparty/TGS:/cluster -v $project_dir/playground/infer/diffusion:/diffusion -v $project_dir/playground/infer/vllm:/vllm -v $project_dir/../BurstGPTDataset/burstgpt:/burstgpt -v $project_dir/exp/vllm+diffusion:/exp -v ~/.cache/huggingface:/root/.cache/huggingface -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/libcontroller.so:/libcontroller.so:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/libcuda.so:/libcuda.so:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/libcuda.so.1:/libcuda.so.1:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/libnvidia-ml.so:/libnvidia-ml.so:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/libnvidia-ml.so.1:/libnvidia-ml.so.1:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/ld.so.preload:/etc/ld.so.preload:ro -v $project_dir/3rdparty/TGS/gsharing:/etc/gsharing -e TGS_WORKER_IP=10.128.0.122 -e TGS_WORKER_PORT=6889 -e TGS_TRAINER_PORT=59967 -e TGS_JOB_ID=2 -e CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps -e GPU_CONFIG_FILE=/gpu_config.json -e GPU_STATUS_FILE=/gpu_status.json easonliu12138/gvm_cuda_12_9 vllm serve $model $param &
 elif [ "$method" == "xsched" ]; then
@@ -85,11 +85,11 @@ elif [ "$method" == "xsched" ]; then
 	vllm serve $model $param &
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/playground/infer/venv/vllm/bin/activate
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" vllm serve $model $param &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom/install:$LD_LIBRARY_PATH vllm serve $model $param &
 elif [ "$method" == "MIG" ]; then
 	source $project_dir/playground/infer/venv/vllm/bin/activate
 	export CUDA_VISIBLE_DEVICES=$device
-	LD_PRELOAD="$project_dir/cuda_custom/libcustom_cuda.so" vllm serve $model $param &
+	LD_LIBRARY_PATH=$project_dir/cuda_custom/install:$LD_LIBRARY_PATH vllm serve $model $param &
 else
 	echo "Unknown method: $method"
 	exit
