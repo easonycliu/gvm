@@ -48,13 +48,13 @@ def parse_args():
 def preempt(pid):
 	print("Preempt {}".format(pid))
 	os.kill(pid, signal.SIGSTOP)
-	with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "compute.freeze"), "w") as f:
-		f.write("{}\n".format(1))
+	# with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "compute.freeze"), "w") as f:
+	# 	f.write("{}\n".format(1))
 
 def reschedule(pid):
 	print("Reschedule {}".format(pid))
-	with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "compute.freeze"), "w") as f:
-		f.write("{}\n".format(0))
+	# with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "compute.freeze"), "w") as f:
+	# 	f.write("{}\n".format(0))
 	os.kill(pid, signal.SIGCONT)
 
 def set_mem_limit(pid, limit):
