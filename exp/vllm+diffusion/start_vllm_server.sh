@@ -9,7 +9,7 @@ priority=
 memlimit=
 model=
 device=
-param="--gpu-memory-utilization 0.8 --disable-log-requests --enforce-eager"
+param="--max-model-len 32768 --gpu-memory-utilization 0.8 --disable-log-requests --enforce-eager"
 
 for flag in "$@"; do
 	case $flag in
