@@ -4,6 +4,7 @@ script_dir=$(dirname ${BASH_SOURCE[0]})
 project_dir=$(realpath $script_dir/../..)
 
 pidfile=
+mode=
 model=
 prompts=
 dataset=
@@ -12,6 +13,9 @@ for flag in "$@"; do
 	case $flag in
 		--pidfile=*)
 			pidfile=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--mode=*)
+			mode=$(echo $flag | awk -F = '{print $2}')
 			;;
 		--model=*)
 			model=$(echo $flag | awk -F = '{print $2}')
@@ -27,6 +31,10 @@ for flag in "$@"; do
 			exit
 	esac
 done
+
+if [ -z $mode ]; then
+	mode="text"
+fi
 
 if [ -z $model ]; then
 	echo "Missing operand: --model"
@@ -44,8 +52,14 @@ fi
 echo "Running burstgpt"
 source $project_dir/playground/infer/venv/vllm/bin/activate
 set -x
-# python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
-python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+if [ "$mode" == "text" ]; then
+	python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+elif [ "$mode" == "video" ]; then
+	python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+else
+	echo "Unsupported mode $mode"
+	exit
+fi
 
 # python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log
 

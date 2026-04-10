@@ -96,61 +96,61 @@ if __name__ == "__main__":
 	be_status = BE_STATUS.UNLIMITED
 	while (True):
 		time.sleep(CHECKING_INTERVAL_MS / 1000)
-		nr_submitted_kernels, nr_ended_kernels, nr_pending_kernels = get_gcgroup_stat(args.lcpid)
-		nr_pending_kernels_list.append(nr_pending_kernels)
-		nr_submitted_kernels_list.append(nr_submitted_kernels)
-		if (time.time() > operate_time + OPERATE_INTERVAL_MIN_MS / 1000):
-			if len(set(nr_submitted_kernels_list[-4:])) == 1:
-				print(nr_submitted_kernels_list[-4:])
-				if be_status == BE_STATUS.UNLIMITED:
-					pass
-				elif be_status == BE_STATUS.LIMITED:
-					set_mem_limit(args.bepid, ctypes.c_ulong(-1).value)
-					be_status = BE_STATUS.UNLIMITED
-					operate_time = time.time()
-				elif be_status == BE_STATUS.PREEMPTED:
-					set_mem_limit(args.bepid, ctypes.c_ulong(-1).value)
-					reschedule(args.bepid)
-					be_status = BE_STATUS.UNLIMITED
-					operate_time = time.time()
-				else:
-					raise AssertionError("Invalid status")
-			else:
-				slide_window_avg_pending_kernels = sum(nr_pending_kernels_list[-SLIDE_WINDOW_SIZE:]) / SLIDE_WINDOW_SIZE
-				if slide_window_avg_pending_kernels > PENDING_KERNEL_UPPER_THRESHOLD:
-					print(nr_pending_kernels_list[-SLIDE_WINDOW_SIZE:])
-					if be_status == BE_STATUS.UNLIMITED:
-						preempt(args.bepid)
-						set_mem_limit(args.bepid, args.bememlimit)
-						be_status = BE_STATUS.PREEMPTED
-						operate_time = time.time()
-					elif be_status == BE_STATUS.LIMITED:
-						preempt(args.bepid)
-						be_status = BE_STATUS.PREEMPTED
-						operate_time = time.time()
-					elif be_status == BE_STATUS.PREEMPTED:
-						pass
-					else:
-						raise AssertionError("Invalid status")
-				elif PENDING_KERNEL_LOWER_THRESHOLD <= slide_window_avg_pending_kernels <= PENDING_KERNEL_UPPER_THRESHOLD:
-					if be_status == BE_STATUS.UNLIMITED:
-						set_mem_limit(args.bepid, args.bememlimit)
-						be_status = BE_STATUS.LIMITED
-						operate_time = time.time()
-					elif be_status == BE_STATUS.LIMITED:
-						pass
-					elif be_status == BE_STATUS.PREEMPTED:
-						pass
-					else:
-						raise AssertionError("Invalid status")
-				elif slide_window_avg_pending_kernels < PENDING_KERNEL_LOWER_THRESHOLD:
-					if be_status == BE_STATUS.UNLIMITED:
-						pass
-					elif be_status == BE_STATUS.LIMITED:
-						pass
-					elif be_status == BE_STATUS.PREEMPTED:
-						reschedule(args.bepid)
-						be_status = BE_STATUS.LIMITED
-						operate_time = time.time()
-					else:
-						raise AssertionError("Invalid status")
+		# nr_submitted_kernels, nr_ended_kernels, nr_pending_kernels = get_gcgroup_stat(args.lcpid)
+		# nr_pending_kernels_list.append(nr_pending_kernels)
+		# nr_submitted_kernels_list.append(nr_submitted_kernels)
+		# if (time.time() > operate_time + OPERATE_INTERVAL_MIN_MS / 1000):
+		# 	if len(set(nr_submitted_kernels_list[-4:])) == 1:
+		# 		print(nr_submitted_kernels_list[-4:])
+		# 		if be_status == BE_STATUS.UNLIMITED:
+		# 			pass
+		# 		elif be_status == BE_STATUS.LIMITED:
+		# 			set_mem_limit(args.bepid, ctypes.c_ulong(-1).value)
+		# 			be_status = BE_STATUS.UNLIMITED
+		# 			operate_time = time.time()
+		# 		elif be_status == BE_STATUS.PREEMPTED:
+		# 			set_mem_limit(args.bepid, ctypes.c_ulong(-1).value)
+		# 			reschedule(args.bepid)
+		# 			be_status = BE_STATUS.UNLIMITED
+		# 			operate_time = time.time()
+		# 		else:
+		# 			raise AssertionError("Invalid status")
+		# 	else:
+		# 		slide_window_avg_pending_kernels = sum(nr_pending_kernels_list[-SLIDE_WINDOW_SIZE:]) / SLIDE_WINDOW_SIZE
+		# 		if slide_window_avg_pending_kernels > PENDING_KERNEL_UPPER_THRESHOLD:
+		# 			print(nr_pending_kernels_list[-SLIDE_WINDOW_SIZE:])
+		# 			if be_status == BE_STATUS.UNLIMITED:
+		# 				preempt(args.bepid)
+		# 				set_mem_limit(args.bepid, args.bememlimit)
+		# 				be_status = BE_STATUS.PREEMPTED
+		# 				operate_time = time.time()
+		# 			elif be_status == BE_STATUS.LIMITED:
+		# 				preempt(args.bepid)
+		# 				be_status = BE_STATUS.PREEMPTED
+		# 				operate_time = time.time()
+		# 			elif be_status == BE_STATUS.PREEMPTED:
+		# 				pass
+		# 			else:
+		# 				raise AssertionError("Invalid status")
+		# 		elif PENDING_KERNEL_LOWER_THRESHOLD <= slide_window_avg_pending_kernels <= PENDING_KERNEL_UPPER_THRESHOLD:
+		# 			if be_status == BE_STATUS.UNLIMITED:
+		# 				set_mem_limit(args.bepid, args.bememlimit)
+		# 				be_status = BE_STATUS.LIMITED
+		# 				operate_time = time.time()
+		# 			elif be_status == BE_STATUS.LIMITED:
+		# 				pass
+		# 			elif be_status == BE_STATUS.PREEMPTED:
+		# 				pass
+		# 			else:
+		# 				raise AssertionError("Invalid status")
+		# 		elif slide_window_avg_pending_kernels < PENDING_KERNEL_LOWER_THRESHOLD:
+		# 			if be_status == BE_STATUS.UNLIMITED:
+		# 				pass
+		# 			elif be_status == BE_STATUS.LIMITED:
+		# 				pass
+		# 			elif be_status == BE_STATUS.PREEMPTED:
+		# 				reschedule(args.bepid)
+		# 				be_status = BE_STATUS.LIMITED
+		# 				operate_time = time.time()
+		# 			else:
+		# 				raise AssertionError("Invalid status")

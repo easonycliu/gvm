@@ -7,9 +7,10 @@ pidfile=
 method=
 priority=
 memlimit=
+mode=
 model=
 device=
-param="--max-model-len 32768 --gpu-memory-utilization 0.8 --disable-log-requests --enforce-eager"
+param="--gpu-memory-utilization 0.8 --disable-log-requests --enforce-eager"
 
 for flag in "$@"; do
 	case $flag in
@@ -18,6 +19,9 @@ for flag in "$@"; do
 			;;
 		--method=*)
 			method=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--mode=*)
+			mode=$(echo $flag | awk -F = '{print $2}')
 			;;
 		--model=*)
 			model=$(echo $flag | awk -F = '{print $2}')
@@ -36,6 +40,10 @@ for flag in "$@"; do
 			exit
 	esac
 done
+
+if [ -z $mode ]; then
+	mode="text"
+fi
 
 if [ -z $method ]; then
 	echo "Missing operand: --method"
@@ -56,6 +64,10 @@ fi
 if [ "$method" == "MIG" ] && [ -z $device ]; then
 	echo "Missing operand: --device"
 	exit
+fi
+
+if [ "$mode" == "video" ]; then
+	param=$(echo "--max-model-len 32768" "$param")
 fi
 
 if [ "$method" == "GVM" ]; then
