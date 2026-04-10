@@ -45,7 +45,7 @@ echo "Running burstgpt"
 source $project_dir/playground/infer/venv/vllm/bin/activate
 set -x
 # python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
-python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
 
 # python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log
 

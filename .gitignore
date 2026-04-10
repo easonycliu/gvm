@@ -26,6 +26,7 @@ cuda/*
 /plots/GCgroupFigureVenv
 /3rdparty/gdrcopy
 /3rdparty/TGSVenv
+/exp/data
 /exp/vllm+diffusion/diffusion_outputs
 /exp/vllm+llama-factory/data
 /exp/vllm+llama-factory/saves

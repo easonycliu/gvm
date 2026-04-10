@@ -63,6 +63,8 @@ if [ "$method" == "xsched" ]; then
 	scheduler_pid=$!
 fi
 
+model="Qwen/Qwen2.5-VL-3B-Instruct"
+
 server_pid=
 server_pid_file=$(mktemp)
 server_script_pid=
@@ -73,29 +75,29 @@ preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
 if [ "$method" == "GVM" ]; then
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --memlimit=60000000000 --priority=$lcpriority &
+	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model=$model --memlimit=60000000000 --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=40000000000 --priority=$bepriority &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=40000000000 --priority=$bepriority --model=wan &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" --device=$lcdevice &
+	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model=$model --device=$lcdevice &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --device=$bedevice &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --device=$bedevice --model=wan &
 	preempt_script_pid=$!
 else
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model="meta-llama/Llama-3.2-3B" &
+	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --model=$model &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --model=wan &
 	preempt_script_pid=$!
 fi
 
 echo "Waiting for system startup"
 sleep 90
 
-./start_vllm_client.sh --pidfile=$client_pid_file --model="meta-llama/Llama-3.2-3B" --prompts=16384 --dataset=$dataset &
+./start_vllm_client.sh --pidfile=$client_pid_file --model=$model --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
 
 while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
