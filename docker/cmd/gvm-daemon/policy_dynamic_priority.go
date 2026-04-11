@@ -44,7 +44,9 @@ func (p *DynamicPriorityPolicy) Init(config SchedulerConfig) error {
 	return nil
 }
 
-func (p *DynamicPriorityPolicy) Tick(hpPending int64, lpProcesses []ProcessInfo) []SchedulingAction {
+func (p *DynamicPriorityPolicy) Tick(ctx SchedulerContext) []SchedulingAction {
+	hpPending := ctx.HPPending
+	lpProcesses := ctx.LPProcesses
 
 	var actions []SchedulingAction
 

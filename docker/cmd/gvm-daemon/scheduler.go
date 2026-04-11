@@ -16,26 +16,39 @@ import (
 type SchedulerPolicy interface {
 	Name() string
 	Init(config SchedulerConfig) error
-	// Tick is called every poll interval with the aggregated HP pending kernel
-	// count and the current LP processes. Returns actions to apply.
-	Tick(hpPending int64, lpProcesses []ProcessInfo) []SchedulingAction
+	// Tick is called every poll interval with the full scheduler context.
+	// Returns actions to apply.
+	Tick(ctx SchedulerContext) []SchedulingAction
 }
 
 // ProcessInfo holds runtime info about a GPU process tracked by the scheduler.
 type ProcessInfo struct {
-	PID          int
-	GPUIndex     int
-	ContainerID  string
+	PID           int
+	GPUIndex      int
+	ContainerID   string
 	ContainerName string
-	Role         string // "hp" or "lp"
+	Role          string // "hp" or "lp"
+	// Memory stats (populated by scheduler loop each tick)
+	MemoryCurrent     int64 // bytes on GPU device
+	MemoryLimit       int64 // configured memory.limit in bytes
+	MemorySwapCurrent int64 // bytes swapped to host
+}
+
+// SchedulerContext is passed to each policy Tick with all process stats.
+type SchedulerContext struct {
+	HPPending   int64            // aggregate HP pending kernel count (or nvidia-smi fallback)
+	HPProcesses []ProcessInfo    // HP processes with memory stats
+	LPProcesses []ProcessInfo    // LP processes with memory stats
+	GPUTotalMem map[int]int64    // GPU index -> total memory in bytes
 }
 
 // SchedulingAction represents a single scheduling action to apply.
 type SchedulingAction struct {
-	PID      int
-	GPUIndex int
-	Action   string // "set_priority", "freeze", "unfreeze"
-	Priority int    // only used for "set_priority"
+	PID         int
+	GPUIndex    int
+	Action      string // "set_priority", "freeze", "unfreeze", "set_memory_limit"
+	Priority    int    // only used for "set_priority"
+	MemoryLimit int64  // only used for "set_memory_limit" (bytes)
 }
 
 // SchedulerConfig holds all configurable parameters for scheduling policies.
@@ -53,6 +66,23 @@ type SchedulerConfig struct {
 	DynIdlePriority     int
 	DynLightPriority    int
 	DynHeavyPriority    int
+
+	// Policy 3: Memory Relaxation
+	MemBorrowFraction      float64
+	MemSafetyMarginBytes   int64
+	MemRampDownStepBytes   int64
+	MemGrowthThresholdBytes int64
+	MemFastGrowthThresholdBytes int64
+	MemReclaimLeadtimeMS   int
+
+	// Policy 4: Swap Throttling
+	SwapFreezeRatio   float64
+	SwapThrottleRatio float64
+	SwapClearRatio    float64
+	SwapCooldownTicks int
+
+	// Combined memory_aware: which compute policy to use as base
+	ComputePolicy string
 }
 
 // DefaultSchedulerConfig returns the default scheduler configuration.
@@ -67,6 +97,20 @@ func DefaultSchedulerConfig() SchedulerConfig {
 		DynIdlePriority:     0,
 		DynLightPriority:    4,
 		DynHeavyPriority:    12,
+
+		MemBorrowFraction:           0.7,
+		MemSafetyMarginBytes:        50 * 1024 * 1024,  // 50 MB
+		MemRampDownStepBytes:         100 * 1024 * 1024, // 100 MB
+		MemGrowthThresholdBytes:      10 * 1024 * 1024,  // 10 MB
+		MemFastGrowthThresholdBytes:  50 * 1024 * 1024,  // 50 MB
+		MemReclaimLeadtimeMS:         200,
+
+		SwapFreezeRatio:   0.3,
+		SwapThrottleRatio: 0.1,
+		SwapClearRatio:    0.02,
+		SwapCooldownTicks: 4,
+
+		ComputePolicy: "dynamic_priority",
 	}
 }
 
@@ -120,6 +164,65 @@ func SchedulerConfigFromEnv() SchedulerConfig {
 		}
 	}
 
+	// Memory relaxation (Policy 3)
+	if v := os.Getenv("GVM_MEM_BORROW_FRACTION"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
+			config.MemBorrowFraction = f
+		}
+	}
+	if v := os.Getenv("GVM_MEM_SAFETY_MARGIN_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			config.MemSafetyMarginBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_MEM_RAMP_DOWN_STEP_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			config.MemRampDownStepBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_MEM_GROWTH_THRESHOLD_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			config.MemGrowthThresholdBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_MEM_FAST_GROWTH_THRESHOLD_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			config.MemFastGrowthThresholdBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_MEM_RECLAIM_LEADTIME_MS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			config.MemReclaimLeadtimeMS = n
+		}
+	}
+
+	// Swap throttling (Policy 4)
+	if v := os.Getenv("GVM_SWAP_FREEZE_RATIO"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
+			config.SwapFreezeRatio = f
+		}
+	}
+	if v := os.Getenv("GVM_SWAP_THROTTLE_RATIO"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
+			config.SwapThrottleRatio = f
+		}
+	}
+	if v := os.Getenv("GVM_SWAP_CLEAR_RATIO"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			config.SwapClearRatio = f
+		}
+	}
+	if v := os.Getenv("GVM_SWAP_COOLDOWN_TICKS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			config.SwapCooldownTicks = n
+		}
+	}
+
+	// Combined policy: underlying compute policy
+	if v := os.Getenv("GVM_COMPUTE_POLICY"); v != "" {
+		config.ComputePolicy = v
+	}
+
 	return config
 }
 
@@ -131,6 +234,12 @@ func SelectPolicy(name string) SchedulerPolicy {
 		return &BurstFreezePolicy{}
 	case "dynamic_priority":
 		return &DynamicPriorityPolicy{}
+	case "memory_relaxation":
+		return &MemoryRelaxationPolicy{}
+	case "swap_throttling":
+		return &SwapThrottlingPolicy{}
+	case "memory_aware":
+		return &MemoryAwarePolicy{}
 	default:
 		return nil
 	}
@@ -174,6 +283,17 @@ func RunScheduler(policy SchedulerPolicy, registry *ProcessRegistry, config Sche
 	ticker := time.NewTicker(config.PollInterval)
 	defer ticker.Stop()
 
+	// Query GPU total memory once at startup
+	gpuTotalMem, err := gvm.QueryGPUTotalMemory()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[%s] Warning: could not query GPU total memory: %v\n", ts(), err)
+		gpuTotalMem = make(map[int]int64)
+	} else {
+		for idx, mem := range gpuTotalMem {
+			fmt.Printf("[%s] GPU %d total memory: %s\n", ts(), idx, gvm.FormatMemoryValue(mem))
+		}
+	}
+
 	useGPUUtil := false
 	for range ticker.C {
 		hp, lp := registry.Get()
@@ -181,10 +301,39 @@ func RunScheduler(policy SchedulerPolicy, registry *ProcessRegistry, config Sche
 			continue
 		}
 
+		// Read memory stats for all processes
+		populateMemoryStats(hp)
+		populateMemoryStats(lp)
+
 		hpLoad := ReadHPLoad(hp, &useGPUUtil)
-		actions := policy.Tick(hpLoad, lp)
+
+		ctx := SchedulerContext{
+			HPPending:   hpLoad,
+			HPProcesses: hp,
+			LPProcesses: lp,
+			GPUTotalMem: gpuTotalMem,
+		}
+
+		actions := policy.Tick(ctx)
 		for _, action := range actions {
 			applySchedulingAction(action)
+		}
+	}
+}
+
+// populateMemoryStats reads memory.current, memory.limit, and memory.swap.current
+// for each process. Errors are silently ignored (process may have exited).
+func populateMemoryStats(procs []ProcessInfo) {
+	for i := range procs {
+		p := &procs[i]
+		if v, err := gvm.GetMemoryCurrent(p.PID, p.GPUIndex); err == nil {
+			p.MemoryCurrent = v
+		}
+		if v, err := gvm.GetMemoryLimit(p.PID, p.GPUIndex); err == nil {
+			p.MemoryLimit = v
+		}
+		if v, err := gvm.GetMemorySwapCurrent(p.PID, p.GPUIndex); err == nil {
+			p.MemorySwapCurrent = v
 		}
 	}
 }
@@ -199,6 +348,8 @@ func applySchedulingAction(action SchedulingAction) {
 		err = gvm.SetComputeFreeze(action.PID, action.GPUIndex, true)
 	case "unfreeze":
 		err = gvm.SetComputeFreeze(action.PID, action.GPUIndex, false)
+	case "set_memory_limit":
+		err = gvm.SetMemoryLimit(action.PID, action.GPUIndex, action.MemoryLimit)
 	default:
 		fmt.Fprintf(os.Stderr, "[%s] Unknown scheduling action: %s\n", ts(), action.Action)
 		return

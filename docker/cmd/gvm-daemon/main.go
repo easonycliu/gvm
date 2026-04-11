@@ -59,7 +59,7 @@ func main() {
 	if policyName != "" {
 		policy = SelectPolicy(policyName)
 		if policy == nil {
-			fmt.Fprintf(os.Stderr, "Warning: unknown GVM_SCHED_POLICY %q (options: burst_freeze, dynamic_priority). Dynamic scheduling disabled.\n", policyName)
+			fmt.Fprintf(os.Stderr, "Warning: unknown GVM_SCHED_POLICY %q (options: burst_freeze, dynamic_priority, memory_relaxation, swap_throttling, memory_aware). Dynamic scheduling disabled.\n", policyName)
 		} else {
 			schedConfig := SchedulerConfigFromEnv()
 			if err := policy.Init(schedConfig); err != nil {

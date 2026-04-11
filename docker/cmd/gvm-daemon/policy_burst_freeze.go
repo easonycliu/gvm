@@ -49,7 +49,9 @@ func (p *BurstFreezePolicy) Init(config SchedulerConfig) error {
 	return nil
 }
 
-func (p *BurstFreezePolicy) Tick(hpPending int64, lpProcesses []ProcessInfo) []SchedulingAction {
+func (p *BurstFreezePolicy) Tick(ctx SchedulerContext) []SchedulingAction {
+	hpPending := ctx.HPPending
+	lpProcesses := ctx.LPProcesses
 
 	var actions []SchedulingAction
 

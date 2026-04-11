@@ -8,6 +8,11 @@ func lp(pid, gpu int) ProcessInfo {
 	return ProcessInfo{PID: pid, GPUIndex: gpu, Role: "lp"}
 }
 
+// mkCtx builds a minimal SchedulerContext for testing.
+func mkCtx(hpPending int64, lps []ProcessInfo) SchedulerContext {
+	return SchedulerContext{HPPending: hpPending, LPProcesses: lps}
+}
+
 // --- BurstFreezePolicy tests ---
 
 func newBurstPolicy(high, low int64) *BurstFreezePolicy {
@@ -35,7 +40,7 @@ func TestBurstFreeze_IdleStaysIdle(t *testing.T) {
 	p := newBurstPolicy(5, 1)
 	lps := []ProcessInfo{lp(100, 0)}
 
-	actions := p.Tick(3, lps) // below high threshold
+	actions := p.Tick(mkCtx(3, lps)) // below high threshold
 	if len(actions) != 0 {
 		t.Fatalf("expected 0 actions in idle, got %d", len(actions))
 	}
@@ -48,7 +53,7 @@ func TestBurstFreeze_TransitionToContention(t *testing.T) {
 	p := newBurstPolicy(5, 1)
 	lps := []ProcessInfo{lp(100, 0), lp(200, 0)}
 
-	actions := p.Tick(6, lps) // above high threshold
+	actions := p.Tick(mkCtx(6, lps)) // above high threshold
 	if p.state != burstStateContention {
 		t.Fatal("expected state CONTENTION")
 	}
@@ -66,10 +71,10 @@ func TestBurstFreeze_ContentionStaysContention(t *testing.T) {
 	p := newBurstPolicy(5, 1)
 	lps := []ProcessInfo{lp(100, 0)}
 
-	p.Tick(6, lps) // -> CONTENTION
+	p.Tick(mkCtx(6, lps)) // -> CONTENTION
 
 	// Still above low threshold, should stay in CONTENTION with no new actions
-	actions := p.Tick(3, lps)
+	actions := p.Tick(mkCtx(3, lps))
 	if p.state != burstStateContention {
 		t.Fatal("expected state to remain CONTENTION")
 	}
@@ -82,8 +87,8 @@ func TestBurstFreeze_TransitionBackToIdle(t *testing.T) {
 	p := newBurstPolicy(5, 1)
 	lps := []ProcessInfo{lp(100, 0)}
 
-	p.Tick(6, lps)  // -> CONTENTION
-	actions := p.Tick(0, lps) // below low threshold -> IDLE
+	p.Tick(mkCtx(6, lps))  // -> CONTENTION
+	actions := p.Tick(mkCtx(0, lps)) // below low threshold -> IDLE
 
 	if p.state != burstStateIdle {
 		t.Fatal("expected state IDLE")
@@ -101,13 +106,13 @@ func TestBurstFreeze_Hysteresis(t *testing.T) {
 	lps := []ProcessInfo{lp(100, 0)}
 
 	// Start idle, go to contention
-	p.Tick(6, lps)
+	p.Tick(mkCtx(6, lps))
 	if p.state != burstStateContention {
 		t.Fatal("expected CONTENTION")
 	}
 
 	// Pending drops to 3 (below high but above low) — should NOT unfreeze
-	actions := p.Tick(3, lps)
+	actions := p.Tick(mkCtx(3, lps))
 	if p.state != burstStateContention {
 		t.Fatal("expected to stay in CONTENTION due to hysteresis")
 	}
@@ -116,7 +121,7 @@ func TestBurstFreeze_Hysteresis(t *testing.T) {
 	}
 
 	// Pending drops to 0 (below low) — NOW unfreeze
-	actions = p.Tick(0, lps)
+	actions = p.Tick(mkCtx(0, lps))
 	if p.state != burstStateIdle {
 		t.Fatal("expected IDLE after dropping below low threshold")
 	}
@@ -129,13 +134,13 @@ func TestBurstFreeze_NoDuplicateFreeze(t *testing.T) {
 	p := newBurstPolicy(5, 1)
 	lps := []ProcessInfo{lp(100, 0)}
 
-	actions1 := p.Tick(6, lps) // -> CONTENTION, freeze
+	actions1 := p.Tick(mkCtx(6, lps)) // -> CONTENTION, freeze
 	if len(actions1) != 1 {
 		t.Fatalf("expected 1 freeze action, got %d", len(actions1))
 	}
 
 	// Still in CONTENTION, same LP process — should NOT re-freeze
-	actions2 := p.Tick(10, lps)
+	actions2 := p.Tick(mkCtx(10, lps))
 	if len(actions2) != 0 {
 		t.Fatalf("expected 0 actions (already frozen), got %d", len(actions2))
 	}
@@ -153,7 +158,7 @@ func TestDynPriority_IdleState(t *testing.T) {
 	p := newDynPolicy()
 	lps := []ProcessInfo{lp(100, 0)}
 
-	actions := p.Tick(0, lps)
+	actions := p.Tick(mkCtx(0, lps))
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action (initial priority set), got %d", len(actions))
 	}
@@ -166,10 +171,10 @@ func TestDynPriority_SkipRedundantWrite(t *testing.T) {
 	p := newDynPolicy()
 	lps := []ProcessInfo{lp(100, 0)}
 
-	p.Tick(0, lps) // set to idle priority (0)
+	p.Tick(mkCtx(0, lps)) // set to idle priority (0)
 
 	// Same state — should produce no actions
-	actions := p.Tick(0, lps)
+	actions := p.Tick(mkCtx(0, lps))
 	if len(actions) != 0 {
 		t.Fatalf("expected 0 actions (priority unchanged), got %d", len(actions))
 	}
@@ -180,7 +185,7 @@ func TestDynPriority_LightLoad(t *testing.T) {
 	lps := []ProcessInfo{lp(100, 0)}
 
 	// Default: light threshold=2, light priority=4
-	actions := p.Tick(3, lps) // >= light, < heavy
+	actions := p.Tick(mkCtx(3, lps)) // >= light, < heavy
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
@@ -194,7 +199,7 @@ func TestDynPriority_HeavyLoad(t *testing.T) {
 	lps := []ProcessInfo{lp(100, 0)}
 
 	// Default: heavy threshold=8, heavy priority=12
-	actions := p.Tick(10, lps) // >= heavy, < extreme
+	actions := p.Tick(mkCtx(10, lps)) // >= heavy, < extreme
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}
@@ -208,7 +213,7 @@ func TestDynPriority_ExtremeFreeze(t *testing.T) {
 	lps := []ProcessInfo{lp(100, 0)}
 
 	// Default: extreme threshold=20
-	actions := p.Tick(25, lps)
+	actions := p.Tick(mkCtx(25, lps))
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 freeze action, got %d", len(actions))
 	}
@@ -221,10 +226,10 @@ func TestDynPriority_UnfreezeAfterExtreme(t *testing.T) {
 	p := newDynPolicy()
 	lps := []ProcessInfo{lp(100, 0)}
 
-	p.Tick(25, lps) // extreme -> freeze
+	p.Tick(mkCtx(25, lps)) // extreme -> freeze
 
 	// Drop back to idle
-	actions := p.Tick(0, lps)
+	actions := p.Tick(mkCtx(0, lps))
 	// Should unfreeze AND set priority
 	hasUnfreeze := false
 	hasPriority := false
@@ -249,23 +254,23 @@ func TestDynPriority_GraduatedTransitions(t *testing.T) {
 	lps := []ProcessInfo{lp(100, 0)}
 
 	// idle -> light -> heavy -> extreme -> heavy -> idle
-	p.Tick(0, lps)   // idle, priority=0
-	actions := p.Tick(3, lps)  // light, priority=4
+	p.Tick(mkCtx(0, lps))   // idle, priority=0
+	actions := p.Tick(mkCtx(3, lps))  // light, priority=4
 	if len(actions) != 1 || actions[0].Priority != 4 {
 		t.Fatalf("idle->light: expected priority 4, got %v", actions)
 	}
 
-	actions = p.Tick(10, lps) // heavy, priority=12
+	actions = p.Tick(mkCtx(10, lps)) // heavy, priority=12
 	if len(actions) != 1 || actions[0].Priority != 12 {
 		t.Fatalf("light->heavy: expected priority 12, got %v", actions)
 	}
 
-	actions = p.Tick(25, lps) // extreme -> freeze
+	actions = p.Tick(mkCtx(25, lps)) // extreme -> freeze
 	if len(actions) != 1 || actions[0].Action != "freeze" {
 		t.Fatalf("heavy->extreme: expected freeze, got %v", actions)
 	}
 
-	actions = p.Tick(10, lps) // back to heavy -> unfreeze + set priority 12
+	actions = p.Tick(mkCtx(10, lps)) // back to heavy -> unfreeze + set priority 12
 	unfreezeCount := 0
 	priorityCount := 0
 	for _, a := range actions {
@@ -283,7 +288,7 @@ func TestDynPriority_GraduatedTransitions(t *testing.T) {
 		t.Fatalf("extreme->heavy: expected 1 set_priority(12), got %d", priorityCount)
 	}
 
-	actions = p.Tick(0, lps) // back to idle, priority=0
+	actions = p.Tick(mkCtx(0, lps)) // back to idle, priority=0
 	if len(actions) != 1 || actions[0].Priority != 0 {
 		t.Fatalf("heavy->idle: expected priority 0, got %v", actions)
 	}
@@ -293,7 +298,7 @@ func TestDynPriority_MultipleLP(t *testing.T) {
 	p := newDynPolicy()
 	lps := []ProcessInfo{lp(100, 0), lp(200, 0), lp(300, 1)}
 
-	actions := p.Tick(10, lps) // heavy
+	actions := p.Tick(mkCtx(10, lps)) // heavy
 	if len(actions) != 3 {
 		t.Fatalf("expected 3 actions for 3 LP processes, got %d", len(actions))
 	}
