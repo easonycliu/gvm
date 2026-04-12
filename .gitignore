@@ -39,3 +39,4 @@ cuda/*
 # Docker daemon binaries
 /docker/gvm-daemon
 /docker/gvm-runc
+/docker/gvm-scheduler

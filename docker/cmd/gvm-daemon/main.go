@@ -1,3 +1,5 @@
+//go:build !standalone
+
 package main
 
 import (
@@ -186,9 +188,14 @@ func main() {
 						allOK = false
 					} else {
 						memLimit := config.MemoryLimitForDevice(gpuIdx, totalGPUMem)
-						fmt.Printf("[%s] Applied controls to PID %d GPU %d (container: %s) — memory=%s priority=%d freeze=%v\n",
+						memReservation := config.MemoryReservationForDevice(gpuIdx, totalGPUMem)
+						reservationStr := ""
+						if memReservation > 0 {
+							reservationStr = fmt.Sprintf(" reservation=%s", gvm.FormatMemoryValue(memReservation))
+						}
+						fmt.Printf("[%s] Applied controls to PID %d GPU %d (container: %s) — limit.high=%s%s priority=%d freeze=%v\n",
 							ts(), gpuPID, gpuIdx, c.Name,
-							gvm.FormatMemoryValue(memLimit), config.ComputePriority, config.ComputeFreeze)
+							gvm.FormatMemoryValue(memLimit), reservationStr, config.ComputePriority, config.ComputeFreeze)
 					}
 
 					// Collect for scheduler registry
@@ -294,10 +301,6 @@ func getRunningContainers() ([]containerInfo, error) {
 	}
 
 	return containers, nil
-}
-
-func ts() string {
-	return time.Now().Format("15:04:05")
 }
 
 func describeMemoryConfig(config *gvm.Config) string {

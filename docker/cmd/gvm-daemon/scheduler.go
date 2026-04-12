@@ -29,9 +29,10 @@ type ProcessInfo struct {
 	ContainerName string
 	Role          string // "hp" or "lp"
 	// Memory stats (populated by scheduler loop each tick)
-	MemoryCurrent     int64 // bytes on GPU device
-	MemoryLimit       int64 // configured memory.limit in bytes
-	MemorySwapCurrent int64 // bytes swapped to host
+	MemoryCurrent     int64 // bytes on GPU device (memory.current)
+	MemoryLimitHigh   int64 // hard ceiling in bytes (memory.limit.high)
+	MemoryLimitLow    int64 // soft reservation in bytes (memory.limit.low)
+	MemorySwapCurrent int64 // bytes swapped to host (memory.swap.current)
 }
 
 // SchedulerContext is passed to each policy Tick with all process stats.
@@ -44,11 +45,12 @@ type SchedulerContext struct {
 
 // SchedulingAction represents a single scheduling action to apply.
 type SchedulingAction struct {
-	PID         int
-	GPUIndex    int
-	Action      string // "set_priority", "freeze", "unfreeze", "set_memory_limit"
-	Priority    int    // only used for "set_priority"
-	MemoryLimit int64  // only used for "set_memory_limit" (bytes)
+	PID             int
+	GPUIndex        int
+	Action          string // "set_priority", "freeze", "unfreeze", "set_memory_limit_high", "set_memory_limit_low"
+	Priority        int    // only used for "set_priority"
+	MemoryLimitHigh int64  // only used for "set_memory_limit_high" (bytes)
+	MemoryLimitLow  int64  // only used for "set_memory_limit_low" (bytes)
 }
 
 // SchedulerConfig holds all configurable parameters for scheduling policies.
@@ -321,16 +323,19 @@ func RunScheduler(policy SchedulerPolicy, registry *ProcessRegistry, config Sche
 	}
 }
 
-// populateMemoryStats reads memory.current, memory.limit, and memory.swap.current
-// for each process. Errors are silently ignored (process may have exited).
+// populateMemoryStats reads memory.current, memory.limit.high, memory.limit.low,
+// and memory.swap.current for each process. Errors are silently ignored (process may have exited).
 func populateMemoryStats(procs []ProcessInfo) {
 	for i := range procs {
 		p := &procs[i]
 		if v, err := gvm.GetMemoryCurrent(p.PID, p.GPUIndex); err == nil {
 			p.MemoryCurrent = v
 		}
-		if v, err := gvm.GetMemoryLimit(p.PID, p.GPUIndex); err == nil {
-			p.MemoryLimit = v
+		if v, err := gvm.GetMemoryLimitHigh(p.PID, p.GPUIndex); err == nil {
+			p.MemoryLimitHigh = v
+		}
+		if v, err := gvm.GetMemoryLimitLow(p.PID, p.GPUIndex); err == nil {
+			p.MemoryLimitLow = v
 		}
 		if v, err := gvm.GetMemorySwapCurrent(p.PID, p.GPUIndex); err == nil {
 			p.MemorySwapCurrent = v
@@ -348,8 +353,10 @@ func applySchedulingAction(action SchedulingAction) {
 		err = gvm.SetComputeFreeze(action.PID, action.GPUIndex, true)
 	case "unfreeze":
 		err = gvm.SetComputeFreeze(action.PID, action.GPUIndex, false)
-	case "set_memory_limit":
-		err = gvm.SetMemoryLimit(action.PID, action.GPUIndex, action.MemoryLimit)
+	case "set_memory_limit_high":
+		err = gvm.SetMemoryLimitHigh(action.PID, action.GPUIndex, action.MemoryLimitHigh)
+	case "set_memory_limit_low":
+		err = gvm.SetMemoryLimitLow(action.PID, action.GPUIndex, action.MemoryLimitLow)
 	default:
 		fmt.Fprintf(os.Stderr, "[%s] Unknown scheduling action: %s\n", ts(), action.Action)
 		return

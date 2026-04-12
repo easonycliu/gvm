@@ -9,7 +9,7 @@ import (
 
 // Config holds all GVM control parameters for a container.
 type Config struct {
-	// Global memory limit in bytes. 0 means unlimited.
+	// Global memory limit (hard ceiling / limit.high) in bytes. 0 means unlimited.
 	MemoryLimit int64
 
 	// Per-device memory limits in bytes, keyed by GPU index.
@@ -19,6 +19,12 @@ type Config struct {
 	// Memory limit as percentage of total GPU memory (1-100).
 	// Only used if MemoryLimit is not set.
 	MemoryPercentage int
+
+	// Global memory reservation (soft floor / limit.low) in bytes. 0 means no reservation.
+	MemoryReservation int64
+
+	// Per-device memory reservations in bytes, keyed by GPU index.
+	PerDeviceMemoryReservation map[int]int64
 
 	// Compute priority (0-15). 0 = highest priority, 15 = lowest.
 	ComputePriority int
@@ -42,9 +48,10 @@ const DefaultPriority = 8
 // This is used by the daemon which reads env vars from docker inspect.
 func ConfigFromEnv(envVars map[string]string) (*Config, error) {
 	config := &Config{
-		ComputePriority:      DefaultPriority,
-		Enabled:              true,
-		PerDeviceMemoryLimit: make(map[int]int64),
+		ComputePriority:            DefaultPriority,
+		Enabled:                    true,
+		PerDeviceMemoryLimit:       make(map[int]int64),
+		PerDeviceMemoryReservation: make(map[int]int64),
 	}
 
 	// GVM_ENABLED
@@ -83,6 +90,32 @@ func ConfigFromEnv(envVars map[string]string) (*Config, error) {
 			return nil, fmt.Errorf("invalid %s %q: %w", key, val, err)
 		}
 		config.PerDeviceMemoryLimit[gpuIdx] = bytes
+	}
+
+	// GVM_MEMORY_RESERVATION (global, sets limit.low)
+	if val, ok := envVars["GVM_MEMORY_RESERVATION"]; ok && val != "" {
+		bytes, err := ParseMemoryValue(val)
+		if err != nil {
+			return nil, fmt.Errorf("invalid GVM_MEMORY_RESERVATION %q: %w", val, err)
+		}
+		config.MemoryReservation = bytes
+	}
+
+	// GVM_MEMORY_RESERVATION_<N> (per-device)
+	for key, val := range envVars {
+		if !strings.HasPrefix(key, "GVM_MEMORY_RESERVATION_") {
+			continue
+		}
+		suffix := strings.TrimPrefix(key, "GVM_MEMORY_RESERVATION_")
+		gpuIdx, err := strconv.Atoi(suffix)
+		if err != nil {
+			continue
+		}
+		bytes, err := ParseMemoryValue(val)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s %q: %w", key, val, err)
+		}
+		config.PerDeviceMemoryReservation[gpuIdx] = bytes
 	}
 
 	// GVM_MEMORY_PERCENTAGE
@@ -138,13 +171,15 @@ func (c *Config) HasAnyControl() bool {
 	return c.MemoryLimit > 0 ||
 		len(c.PerDeviceMemoryLimit) > 0 ||
 		c.MemoryPercentage > 0 ||
+		c.MemoryReservation > 0 ||
+		len(c.PerDeviceMemoryReservation) > 0 ||
 		c.ComputePriority != DefaultPriority ||
 		c.ComputeFreeze ||
 		c.Role != ""
 }
 
-// MemoryLimitForDevice returns the effective memory limit in bytes for a
-// specific GPU device index. Returns 0 if no limit is configured.
+// MemoryLimitForDevice returns the effective hard ceiling (limit.high) in bytes
+// for a specific GPU device index. Returns 0 if no limit is configured.
 //
 // Priority: per-device limit > global limit > percentage-based limit.
 // For percentage-based, totalGPUMemory must be provided (in bytes).
@@ -164,6 +199,20 @@ func (c *Config) MemoryLimitForDevice(gpuIndex int, totalGPUMemory int64) int64 
 		return totalGPUMemory * int64(c.MemoryPercentage) / 100
 	}
 
+	return 0
+}
+
+// MemoryReservationForDevice returns the effective soft reservation (limit.low)
+// in bytes for a specific GPU device index. Returns 0 if no reservation is configured.
+//
+// Priority: per-device reservation > global reservation.
+func (c *Config) MemoryReservationForDevice(gpuIndex int, totalGPUMemory int64) int64 {
+	if reservation, ok := c.PerDeviceMemoryReservation[gpuIndex]; ok {
+		return reservation
+	}
+	if c.MemoryReservation > 0 {
+		return c.MemoryReservation
+	}
 	return 0
 }
 

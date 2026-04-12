@@ -44,20 +44,51 @@ func ReadSysfs(path string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// SetMemoryLimit writes the memory limit (in bytes) for a GPU process.
-func SetMemoryLimit(pid int, gpuIndex int, limitBytes int64) error {
-	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit")
+// SetMemoryLimitHigh writes the hard memory ceiling (memory.limit.high) in bytes.
+// If the process exceeds this limit, the kernel force-evicts pages synchronously.
+// The write blocks until eviction completes.
+func SetMemoryLimitHigh(pid int, gpuIndex int, limitBytes int64) error {
+	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit.high")
 	return WriteSysfs(path, strconv.FormatInt(limitBytes, 10))
 }
 
-// GetMemoryLimit reads the current memory limit for a GPU process.
-func GetMemoryLimit(pid int, gpuIndex int) (int64, error) {
-	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit")
+// GetMemoryLimitHigh reads the current hard memory ceiling (memory.limit.high).
+// Returns -1 for unlimited.
+func GetMemoryLimitHigh(pid int, gpuIndex int) (int64, error) {
+	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit.high")
 	val, err := ReadSysfs(path)
 	if err != nil {
 		return 0, err
 	}
 	return strconv.ParseInt(val, 10, 64)
+}
+
+// SetMemoryLimitLow writes the soft memory reservation (memory.limit.low) in bytes.
+// This is the guaranteed safe zone — no eviction notices below this.
+// If set above memory.current, triggers a reallocation notice to the process.
+func SetMemoryLimitLow(pid int, gpuIndex int, limitBytes int64) error {
+	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit.low")
+	return WriteSysfs(path, strconv.FormatInt(limitBytes, 10))
+}
+
+// GetMemoryLimitLow reads the current soft memory reservation (memory.limit.low).
+func GetMemoryLimitLow(pid int, gpuIndex int) (int64, error) {
+	path := filepath.Join(GPUProcessPath(pid, gpuIndex), "memory.limit.low")
+	val, err := ReadSysfs(path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(val, 10, 64)
+}
+
+// SetMemoryLimit is a backwards-compatible alias that sets memory.limit.high.
+func SetMemoryLimit(pid int, gpuIndex int, limitBytes int64) error {
+	return SetMemoryLimitHigh(pid, gpuIndex, limitBytes)
+}
+
+// GetMemoryLimit is a backwards-compatible alias that reads memory.limit.high.
+func GetMemoryLimit(pid int, gpuIndex int) (int64, error) {
+	return GetMemoryLimitHigh(pid, gpuIndex)
 }
 
 // GetMemoryCurrent reads the current GPU memory usage for a process.
@@ -239,11 +270,19 @@ func ApplyConfig(pid int, gpuIndex int, config *Config, totalGPUMemory int64) er
 		return nil
 	}
 
-	// Apply memory limit
+	// Apply memory limits (two-level: limit.high = hard ceiling, limit.low = reservation)
 	memLimit := config.MemoryLimitForDevice(gpuIndex, totalGPUMemory)
 	if memLimit > 0 {
-		if err := SetMemoryLimit(pid, gpuIndex, memLimit); err != nil {
-			return fmt.Errorf("set memory.limit for PID %d GPU %d: %w", pid, gpuIndex, err)
+		if err := SetMemoryLimitHigh(pid, gpuIndex, memLimit); err != nil {
+			return fmt.Errorf("set memory.limit.high for PID %d GPU %d: %w", pid, gpuIndex, err)
+		}
+	}
+
+	// Apply memory reservation if configured
+	memReservation := config.MemoryReservationForDevice(gpuIndex, totalGPUMemory)
+	if memReservation > 0 {
+		if err := SetMemoryLimitLow(pid, gpuIndex, memReservation); err != nil {
+			return fmt.Errorf("set memory.limit.low for PID %d GPU %d: %w", pid, gpuIndex, err)
 		}
 	}
 

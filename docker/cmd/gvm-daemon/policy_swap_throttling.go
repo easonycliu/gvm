@@ -59,13 +59,13 @@ func (p *SwapThrottlingPolicy) tickSwap(ctx SchedulerContext) []SchedulingAction
 		key := lpKey{PID: lp.PID, GPUIndex: lp.GPUIndex}
 
 		lpSwap := lp.MemorySwapCurrent
-		lpMemLimit := lp.MemoryLimit
-		if lpMemLimit <= 0 {
+		lpMemLimitHigh := lp.MemoryLimitHigh
+		if lpMemLimitHigh <= 0 {
 			// No limit set — can't compute ratio, skip
 			continue
 		}
 
-		swapRatio := float64(lpSwap) / float64(lpMemLimit)
+		swapRatio := float64(lpSwap) / float64(lpMemLimitHigh)
 
 		// Track swap velocity
 		_ = lpSwap - p.lastLPSwap[key] // swapDelta — for future use
