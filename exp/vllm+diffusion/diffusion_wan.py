@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import signal
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,8 @@ import torch
 from diffusers import WanPipeline
 from diffusers.utils import export_to_video
 from huggingface_hub import hf_hub_download
+
+import gvm_notify
 
 LOG_LEVEL = "INFO"
 DISABLE_PROGRESS_BAR = True
@@ -146,6 +149,11 @@ class DiffusionInferenceServer:
         self.shutdown_requested = False
         self.processed_requests = 0
         self.stream = torch.cuda.Stream()
+        self.max_batch_size = config.batch_size
+        self._notif_thread = None
+        self._model_memory = 0
+        self._pending_ack_uuid = None
+        self._pending_ack_lock = threading.Lock()
 
     def init_pipeline(self):
         """Initialize the Wan2.1 pipeline and (optionally) load Turbo weights."""
@@ -209,7 +217,8 @@ class DiffusionInferenceServer:
 
         self.pipeline.set_progress_bar_config(disable=DISABLE_PROGRESS_BAR)
         self.pipeline = self.pipeline.to(self.config.device)
-        logger.info("Pipeline initialized successfully.")
+        self._model_memory = torch.cuda.memory_allocated()
+        logger.info(f"Pipeline initialized successfully. Model memory: {self._model_memory / (1 << 30):.2f} GiB")
 
     def load_requests_from_file(
         self, dataset_path: str, num_requests: int
@@ -334,6 +343,76 @@ class DiffusionInferenceServer:
         logger.info(f"{total_requests} requests processed")
         logger.info(f"Average inference time: {avg_inference_time:.2f}s")
 
+    def _notif_handler(self):
+        """Thread that listens for GPU memory eviction/reallocation notices."""
+        while not self.shutdown_requested:
+            try:
+                notice = gvm_notify.wait_notice()
+            except Exception:
+                if self.shutdown_requested:
+                    break
+                continue
+
+            if notice["type"] == gvm_notify.EVICTION:
+                target = notice["target_memory"]
+                current = notice["current_memory"]
+                model = self._model_memory
+                old_bs = self.config.batch_size
+                batch_mem = current - model
+                if batch_mem > 0 and old_bs > 0:
+                    target_batch_mem = max(0, target - model)
+                    new_bs = max(1, int(old_bs * target_batch_mem / batch_mem))
+                else:
+                    new_bs = max(1, old_bs // 2)
+                self.config.batch_size = new_bs
+                logger.info(
+                    f"[umfd] Eviction notice: batch_size {old_bs} -> {new_bs}"
+                    f" (target={target}, current={current}, model={model})"
+                )
+                # Defer ack until the current batch finishes and memory
+                # is actually freed.  Acking immediately would clear
+                # notice_active while the GPU memory is still allocated,
+                # causing repeated eviction notices on every page fault.
+                with self._pending_ack_lock:
+                    self._pending_ack_uuid = notice["uuid"]
+            elif notice["type"] == gvm_notify.REALLOCATION:
+                target = notice["target_memory"]
+                current = notice["current_memory"]
+                model = self._model_memory
+                old_bs = self.config.batch_size
+                batch_mem = current - model
+                if batch_mem > 0 and old_bs > 0:
+                    target_batch_mem = max(0, target - model)
+                    new_bs = max(1, int(old_bs * target_batch_mem / batch_mem))
+                else:
+                    new_bs = old_bs * 2
+                self.config.batch_size = new_bs
+                self.max_batch_size = max(self.max_batch_size, new_bs)
+                logger.info(
+                    f"[umfd] Reallocation notice: batch_size {old_bs} -> {new_bs}"
+                    f" (target={target}, current={current})"
+                )
+
+    def _start_notif_handler(self):
+        """Register umfd and start the notification listener thread."""
+        try:
+            gvm_notify.register_notify()
+            self._notif_thread = threading.Thread(
+                target=self._notif_handler, daemon=True)
+            self._notif_thread.start()
+            logger.info("[umfd] Registered and listener thread started")
+        except Exception as e:
+            logger.warning(f"[umfd] Failed to register: {e}, running without cooperative reclaim")
+
+    def _stop_notif_handler(self):
+        """Unregister umfd and stop the notification listener thread."""
+        try:
+            gvm_notify.unregister_notify()
+        except Exception:
+            pass
+        if self._notif_thread and self._notif_thread.is_alive():
+            self._notif_thread.join(timeout=2)
+
     def signal_handler(self, signum, frame):
         logger.warning("\nReceived interrupt signal. Shutting down gracefully...")
         logger.info(f"Processed {self.processed_requests} requests so far.")
@@ -345,23 +424,44 @@ class DiffusionInferenceServer:
 
         self.init_pipeline()
 
+        # Start cooperative memory reclaim listener
+        self._start_notif_handler()
+
         requests = self.load_requests_from_file(dataset_path, num_requests)
         if not requests:
             logger.error("No valid requests found. Exiting.")
+            self._stop_notif_handler()
             return
 
         logger.info(f"Starting to process {len(requests)} requests (batch_size={self.config.batch_size})...")
 
-        # Process requests in batches
-        for i in range(0, len(requests), self.config.batch_size):
+        # Process requests in batches (while-loop so dynamic batch_size takes effect)
+        i = 0
+        while i < len(requests):
             if self.shutdown_requested:
                 logger.warning("Shutdown requested. Stopping processing.")
                 break
 
-            batch = requests[i:i + self.config.batch_size]
+            bs = self.config.batch_size
+            batch = requests[i:i + bs]
             results = self.process_batch(batch)
             self.results.extend(results)
             self.processed_requests += len(results)
+            i += len(batch)
+
+            # If an eviction notice arrived during this batch, the
+            # memory is now freed (batch finished).  Release the CUDA
+            # caches and ack so the kernel knows we actually reclaimed.
+            with self._pending_ack_lock:
+                ack_uuid = self._pending_ack_uuid
+                self._pending_ack_uuid = None
+            if ack_uuid is not None:
+                torch.cuda.empty_cache()
+                gvm_notify.reclaim_ack(ack_uuid)
+                logger.info("[umfd] Deferred reclaim_ack sent after batch completed")
+
+        # Cleanup
+        self._stop_notif_handler()
 
         logger.info("\nProcessing completed. Saving log...")
         self.save_log(output_log)
