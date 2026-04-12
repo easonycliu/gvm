@@ -125,6 +125,7 @@ class InferenceResult:
     end_time: float
     inference_duration: float
     queue_wait_time: float
+    batch_size: int
 
 
 class DiffusionInferenceServer:
@@ -184,17 +185,18 @@ class DiffusionInferenceServer:
             logger.error(f"Error loading requests: {str(e)}")
             return []
 
-    def process_request(self, request: InferenceRequest) -> InferenceResult:
-        """Process a single inference request with detailed timing."""
+    def process_batch(self, batch: List[InferenceRequest]) -> List[InferenceResult]:
+        """Process a batch of inference requests."""
         start_time = time.time()
-        queue_wait_time = start_time - request.arrival_time
+        ids = [r.request_id for r in batch]
+        prompts = [r.prompt for r in batch]
 
-        logger.info(f"Processing {request.request_id}: {request.prompt[:50]}...")
+        logger.info(f"Processing batch {ids}: {len(batch)} request(s)")
 
         try:
             with torch.cuda.stream(self.stream):
                 images = self.pipeline(
-                    prompt=[request.prompt],
+                    prompt=prompts,
                     num_inference_steps=self.config.num_inference_steps,
                     guidance_scale=self.config.guidance_scale,
                 ).images
@@ -205,38 +207,46 @@ class DiffusionInferenceServer:
 
             # Save images if requested
             if self.save_images and images:
-                for idx, image in enumerate(images):
+                for request, image in zip(batch, images):
                     output_path = (
-                        self.config.output_dir / f"{request.request_id}_{idx}.png"
+                        self.config.output_dir / f"{request.request_id}.png"
                     )
                     image.save(output_path)
 
-            result = InferenceResult(
-                request_id=request.request_id,
-                prompt=request.prompt,
-                arrival_time=request.arrival_time,
-                start_time=start_time,
-                end_time=end_time,
-                inference_duration=inference_duration,
-                queue_wait_time=queue_wait_time,
-            )
+            actual_batch_size = len(batch)
+            results = []
+            for request in batch:
+                results.append(InferenceResult(
+                    request_id=request.request_id,
+                    prompt=request.prompt,
+                    arrival_time=request.arrival_time,
+                    start_time=start_time,
+                    end_time=end_time,
+                    inference_duration=inference_duration,
+                    queue_wait_time=start_time - request.arrival_time,
+                    batch_size=actual_batch_size,
+                ))
 
-            logger.info(f"Completed {request.request_id} in {inference_duration:.2f}s")
-            return result
+            logger.info(f"Completed batch {ids} in {inference_duration:.2f}s")
+            return results
 
         except Exception as e:
-            logger.error(f"Error processing {request.request_id}: {str(e)}")
-            # Return error result with timing data
+            logger.error(f"Error processing batch {ids}: {str(e)}")
             end_time = time.time()
-            return InferenceResult(
-                request_id=request.request_id,
-                prompt=request.prompt,
-                arrival_time=request.arrival_time,
-                start_time=start_time,
-                end_time=end_time,
-                inference_duration=end_time - start_time,
-                queue_wait_time=queue_wait_time,
-            )
+            actual_batch_size = len(batch)
+            return [
+                InferenceResult(
+                    request_id=r.request_id,
+                    prompt=r.prompt,
+                    arrival_time=r.arrival_time,
+                    start_time=start_time,
+                    end_time=end_time,
+                    inference_duration=end_time - start_time,
+                    queue_wait_time=start_time - r.arrival_time,
+                    batch_size=actual_batch_size,
+                )
+                for r in batch
+            ]
 
     def save_log(self, output_file: str):
         """Save timing results to CSV file."""
@@ -250,9 +260,9 @@ class DiffusionInferenceServer:
         # Save log file in the output directory
         log_path = self.config.output_dir / output_file
         with open(log_path, "w", encoding="utf-8") as f:
-            # Write simple text format: request_id inference_duration
+            # Write per-request latency (batch duration / batch size)
             for result in self.results:
-                f.write(f"{result.inference_duration:.3f}\n")
+                f.write(f"{result.inference_duration / result.batch_size:.3f}\n")
 
         logger.info(f"Timing log saved to {log_path}")
 
@@ -284,17 +294,18 @@ class DiffusionInferenceServer:
             logger.error("No valid requests found. Exiting.")
             return
 
-        logger.info(f"Starting to process {len(requests)} requests...")
+        logger.info(f"Starting to process {len(requests)} requests (batch_size={self.config.batch_size})...")
 
-        # Process requests sequentially
-        for request in requests:
+        # Process requests in batches
+        for i in range(0, len(requests), self.config.batch_size):
             if self.shutdown_requested:
                 logger.warning("Shutdown requested. Stopping processing.")
                 break
 
-            result = self.process_request(request)
-            self.results.append(result)
-            self.processed_requests += 1
+            batch = requests[i:i + self.config.batch_size]
+            results = self.process_batch(batch)
+            self.results.extend(results)
+            self.processed_requests += len(results)
 
         # Save results
         logger.info("\nProcessing completed. Saving log...")
@@ -330,6 +341,10 @@ def main():
     )
 
     # Model configuration arguments
+    parser.add_argument(
+        "--batch_size", type=int, default=default_config["batch_size"],
+        help="Number of prompts to process per batch",
+    )
     parser.add_argument("--model_path", type=str, default=default_config["model_path"])
     parser.add_argument(
         "--num_inference_steps", type=int, default=default_config["num_inference_steps"]
@@ -350,7 +365,7 @@ def main():
     # Initialize configuration
     config = SDConfig(
         model_path=args.model_path,
-        batch_size=1,  # Always 1 for sequential processing
+        batch_size=args.batch_size,
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
         output_dir=args.output_dir,

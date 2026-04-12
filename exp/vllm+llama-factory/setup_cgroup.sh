@@ -44,7 +44,7 @@ while true; do
 	gcgroup_set=false
 	for pid in $child_pids; do
 		if echo "$gpu_pids" | grep -qx "$pid"; then
-			echo $memlimit | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$pid/0/memory.limit
+			echo $memlimit | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$pid/0/memory.limit.high
 			echo $priority | sudo tee /sys/kernel/debug/nvidia-uvm/processes/$pid/0/compute.priority
 			gcgroup_set=true
 			echo "Setup cgroup for pid $pid"
