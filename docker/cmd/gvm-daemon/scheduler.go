@@ -85,6 +85,15 @@ type SchedulerConfig struct {
 
 	// Combined memory_aware: which compute policy to use as base
 	ComputePolicy string
+
+	// Adaptive Memory Policy
+	AdaptiveHPIdleThreshold       int64
+	AdaptiveHPBusyThreshold       int64
+	AdaptiveHPMinCacheFrac        float64
+	AdaptiveHPMaxCacheFrac        float64
+	AdaptiveLPMinReservationBytes int64
+	AdaptiveRampStepBytes         int64
+	AdaptiveSafetyMarginBytes     int64
 }
 
 // DefaultSchedulerConfig returns the default scheduler configuration.
@@ -113,6 +122,14 @@ func DefaultSchedulerConfig() SchedulerConfig {
 		SwapCooldownTicks: 4,
 
 		ComputePolicy: "dynamic_priority",
+
+		AdaptiveHPIdleThreshold:       2,
+		AdaptiveHPBusyThreshold:       8,
+		AdaptiveHPMinCacheFrac:        0.20,
+		AdaptiveHPMaxCacheFrac:        0.80,
+		AdaptiveLPMinReservationBytes: 512 * 1024 * 1024, // 512 MB
+		AdaptiveRampStepBytes:         128 * 1024 * 1024, // 128 MB
+		AdaptiveSafetyMarginBytes:     100 * 1024 * 1024, // 100 MB
 	}
 }
 
@@ -225,6 +242,43 @@ func SchedulerConfigFromEnv() SchedulerConfig {
 		config.ComputePolicy = v
 	}
 
+	// Adaptive memory policy
+	if v := os.Getenv("GVM_ADAPTIVE_HP_IDLE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			config.AdaptiveHPIdleThreshold = n
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_HP_BUSY"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			config.AdaptiveHPBusyThreshold = n
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_HP_MIN_CACHE_FRAC"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f < 1 {
+			config.AdaptiveHPMinCacheFrac = f
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_HP_MAX_CACHE_FRAC"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
+			config.AdaptiveHPMaxCacheFrac = f
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_LP_MIN_RESERVATION_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			config.AdaptiveLPMinReservationBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_RAMP_STEP_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			config.AdaptiveRampStepBytes = n * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("GVM_ADAPTIVE_SAFETY_MARGIN_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			config.AdaptiveSafetyMarginBytes = n * 1024 * 1024
+		}
+	}
+
 	return config
 }
 
@@ -242,6 +296,8 @@ func SelectPolicy(name string) SchedulerPolicy {
 		return &SwapThrottlingPolicy{}
 	case "memory_aware":
 		return &MemoryAwarePolicy{}
+	case "adaptive_memory":
+		return &AdaptiveMemoryPolicy{}
 	default:
 		return nil
 	}

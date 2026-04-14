@@ -85,13 +85,22 @@ func main() {
 
 		// Combined policy
 		computePolicy string
+
+		// Adaptive memory
+		adaptiveHPIdle       int64
+		adaptiveHPBusy       int64
+		adaptiveHPMinCache   float64
+		adaptiveHPMaxCache   float64
+		adaptiveLPMinResMB   int64
+		adaptiveRampMB       int64
+		adaptiveSafetyMB     int64
 	)
 
 	flag.Var(&hpPIDs, "hppid", "HP (high-priority / latency-critical) PID(s), comma-separated")
 	flag.Var(&lpPIDs, "lppid", "LP (low-priority / best-effort) PID(s), comma-separated")
 	flag.IntVar(&gpuIndex, "gpu", 0, "GPU index (default: 0)")
 	flag.StringVar(&policyName, "policy", "dynamic_priority",
-		"Scheduling policy: burst_freeze, dynamic_priority, memory_relaxation, swap_throttling, memory_aware")
+		"Scheduling policy: burst_freeze, dynamic_priority, memory_relaxation, swap_throttling, memory_aware, adaptive_memory")
 	flag.IntVar(&intervalMS, "interval", 100, "Poll interval in ms (default: 100)")
 
 	flag.Int64Var(&hpMemLimitHigh, "hp-memlimit-high", -1, "HP memory.limit.high in bytes (-1 = unlimited)")
@@ -124,7 +133,15 @@ func main() {
 	flag.IntVar(&swapCooldownTicks, "swap-cooldown-ticks", 4, "Swap throttling: cooldown ticks")
 
 	flag.StringVar(&computePolicy, "compute-policy", "dynamic_priority",
-		"For memory_aware: underlying compute policy (burst_freeze or dynamic_priority)")
+		"For memory_aware/adaptive_memory: underlying compute policy (burst_freeze or dynamic_priority)")
+
+	flag.Int64Var(&adaptiveHPIdle, "adaptive-hp-idle", 2, "Adaptive memory: HP load idle threshold")
+	flag.Int64Var(&adaptiveHPBusy, "adaptive-hp-busy", 8, "Adaptive memory: HP load busy threshold")
+	flag.Float64Var(&adaptiveHPMinCache, "adaptive-hp-min-cache", 0.20, "Adaptive memory: HP min cache fraction of GPU (0-1)")
+	flag.Float64Var(&adaptiveHPMaxCache, "adaptive-hp-max-cache", 0.80, "Adaptive memory: HP max cache fraction of GPU (0-1)")
+	flag.Int64Var(&adaptiveLPMinResMB, "adaptive-lp-min-res-mb", 512, "Adaptive memory: LP minimum reservation in MB")
+	flag.Int64Var(&adaptiveRampMB, "adaptive-ramp-mb", 128, "Adaptive memory: ramp step per tick in MB")
+	flag.Int64Var(&adaptiveSafetyMB, "adaptive-safety-mb", 100, "Adaptive memory: safety margin in MB")
 
 	flag.Parse()
 
@@ -164,13 +181,20 @@ func main() {
 		SwapThrottleRatio:           swapThrottleRatio,
 		SwapClearRatio:              swapClearRatio,
 		SwapCooldownTicks:           swapCooldownTicks,
-		ComputePolicy:               computePolicy,
+		ComputePolicy:                    computePolicy,
+		AdaptiveHPIdleThreshold:          adaptiveHPIdle,
+		AdaptiveHPBusyThreshold:          adaptiveHPBusy,
+		AdaptiveHPMinCacheFrac:           adaptiveHPMinCache,
+		AdaptiveHPMaxCacheFrac:           adaptiveHPMaxCache,
+		AdaptiveLPMinReservationBytes:    adaptiveLPMinResMB * 1024 * 1024,
+		AdaptiveRampStepBytes:            adaptiveRampMB * 1024 * 1024,
+		AdaptiveSafetyMarginBytes:        adaptiveSafetyMB * 1024 * 1024,
 	}
 
 	// Select and initialize policy
 	policy := SelectPolicy(policyName)
 	if policy == nil {
-		fmt.Fprintf(os.Stderr, "Error: unknown policy %q. Valid: burst_freeze, dynamic_priority, memory_relaxation, swap_throttling, memory_aware\n", policyName)
+		fmt.Fprintf(os.Stderr, "Error: unknown policy %q. Valid: burst_freeze, dynamic_priority, memory_relaxation, swap_throttling, memory_aware, adaptive_memory\n", policyName)
 		os.Exit(1)
 	}
 	if err := policy.Init(config); err != nil {

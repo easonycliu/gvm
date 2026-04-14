@@ -55,7 +55,7 @@ def parse_args():
 	parser.add_argument(
 		"--policy",
 		default="burst_freeze",
-		choices=["burst_freeze", "dynamic_priority", "memory_relaxation", "swap_throttling", "memory_aware"],
+		choices=["burst_freeze", "dynamic_priority", "memory_relaxation", "swap_throttling", "memory_aware", "adaptive_memory"],
 		help="Scheduling policy (default: burst_freeze)."
 	)
 	parser.add_argument(
@@ -225,6 +225,49 @@ def parse_args():
 		type=int,
 		help="dynamic_priority: BE priority at heavy load (default: 12)."
 	)
+	# Adaptive memory policy parameters
+	parser.add_argument(
+		"--adaptive-hp-idle",
+		default=2,
+		type=int,
+		help="adaptive_memory: HP load idle threshold (default: 2)."
+	)
+	parser.add_argument(
+		"--adaptive-hp-busy",
+		default=8,
+		type=int,
+		help="adaptive_memory: HP load busy threshold (default: 8)."
+	)
+	parser.add_argument(
+		"--adaptive-hp-min-cache",
+		default=0.20,
+		type=float,
+		help="adaptive_memory: HP min cache fraction of GPU (default: 0.20)."
+	)
+	parser.add_argument(
+		"--adaptive-hp-max-cache",
+		default=0.80,
+		type=float,
+		help="adaptive_memory: HP max cache fraction of GPU (default: 0.80)."
+	)
+	parser.add_argument(
+		"--adaptive-lp-min-res-mb",
+		default=512,
+		type=int,
+		help="adaptive_memory: LP minimum reservation in MB (default: 512)."
+	)
+	parser.add_argument(
+		"--adaptive-ramp-mb",
+		default=128,
+		type=int,
+		help="adaptive_memory: ramp step per tick in MB (default: 128)."
+	)
+	parser.add_argument(
+		"--adaptive-safety-mb",
+		default=100,
+		type=int,
+		help="adaptive_memory: safety margin in MB (default: 100)."
+	)
 	return parser.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -348,6 +391,18 @@ def get_gpu_utilization():
 		return int(lines[0].strip()) if lines else -1
 	except Exception:
 		return -1
+
+def get_gpu_total_mem():
+	"""Returns GPU total memory in bytes, or 0 on error."""
+	try:
+		result = subprocess.run(
+			["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+			capture_output=True, text=True, timeout=5)
+		if result.returncode == 0:
+			return int(result.stdout.strip().split("\n")[0]) * 1024 * 1024  # MiB → bytes
+	except Exception:
+		pass
+	return 0
 
 def get_lc_load(lcpid, gpu, use_gpu_util, pending_window):
 	"""
@@ -865,6 +920,262 @@ def run_memory_aware(args):
 						log("burst_freeze: UNFREEZE BE (load={})".format(lc_load))
 
 # ---------------------------------------------------------------------------
+# Policy: adaptive_memory (bidirectional HP cache + dynamic LP reservation)
+# ---------------------------------------------------------------------------
+
+def run_adaptive_memory(args):
+	gpu = args.gpu
+	compute_policy = args.compute_policy
+
+	# Adaptive memory parameters
+	hp_idle_threshold = args.adaptive_hp_idle
+	hp_busy_threshold = args.adaptive_hp_busy
+	hp_min_cache_frac = args.adaptive_hp_min_cache
+	hp_max_cache_frac = args.adaptive_hp_max_cache
+	lp_min_reservation = args.adaptive_lp_min_res_mb * 1024 * 1024
+	ramp_step = args.adaptive_ramp_mb * 1024 * 1024
+	safety_margin = args.adaptive_safety_mb * 1024 * 1024
+	poll_interval_ms = args.interval
+
+	# Swap throttling state
+	swap_freeze_ratio = args.swap_freeze_ratio
+	swap_throttle_ratio = args.swap_throttle_ratio
+	swap_clear_ratio = args.swap_clear_ratio
+	swap_cooldown_ticks = args.swap_cooldown_ticks
+
+	# Compute policy state
+	light_threshold = args.dyn_light
+	heavy_threshold = args.dyn_heavy
+	extreme_threshold = args.dyn_extreme
+	idle_priority = args.dyn_idle_priority
+	light_priority = args.dyn_light_priority
+	heavy_priority = args.dyn_heavy_priority
+	upper_threshold = args.upper
+	lower_threshold = args.lower
+
+	log("adaptive_memory config: hp_idle={} hp_busy={} hp_cache=[{:.0f}%,{:.0f}%] lp_min_res={}MB ramp={}MB safety={}MB compute={}".format(
+		hp_idle_threshold, hp_busy_threshold,
+		hp_min_cache_frac * 100, hp_max_cache_frac * 100,
+		args.adaptive_lp_min_res_mb, args.adaptive_ramp_mb, args.adaptive_safety_mb,
+		compute_policy))
+
+	# Query GPU total memory once
+	gpu_total = get_gpu_total_mem()
+	if gpu_total > 0:
+		log("GPU total memory: {} ({})".format(gpu_total, fmt_mb(gpu_total)))
+	else:
+		log("WARNING: could not query GPU total memory; adaptive_memory may not work correctly")
+
+	hp_min_cache = int(gpu_total * hp_min_cache_frac) if gpu_total > 0 else 0
+	hp_max_cache = int(gpu_total * hp_max_cache_frac) if gpu_total > 0 else 0
+
+	# HP state
+	hp_current_high = None  # last-written HP limit.high
+	hp_mem_prev = None
+	hp_mem_initialized = False
+
+	# LP state
+	lp_current_high = None
+	lp_current_low = None
+
+	# Swap state
+	swap_cooldown_remaining = 0
+	swap_is_frozen = False
+	swap_throttle_priority = None
+
+	# Compute state
+	compute_is_frozen = False
+	compute_last_priority = None
+
+	use_gpu_util = [False]
+	raw_pending_window = collections.deque(maxlen=30)
+
+	while True:
+		time.sleep(poll_interval_ms / 1000.0)
+
+		# Read LC (HP) stats
+		lc_mem_current = get_mem_current(args.lcpid, gpu)
+		lc_mem_limit_high = get_mem_limit_high(args.lcpid, gpu)
+		lc_load = get_lc_load(args.lcpid, gpu, use_gpu_util, raw_pending_window)
+
+		# Read BE (LP) stats
+		be_mem_current = get_mem_current(args.bepid, gpu)
+		be_mem_limit_high = get_mem_limit_high(args.bepid, gpu)
+
+		# HP memory growth
+		hp_mem_delta = 0
+		if hp_mem_initialized:
+			hp_mem_delta = lc_mem_current - hp_mem_prev
+		else:
+			hp_mem_initialized = True
+		hp_mem_prev = lc_mem_current
+
+		# --- Phase 1: HP Cache Sizing ---
+		if hp_current_high is None:
+			hp_current_high = lc_mem_limit_high if lc_mem_limit_high > 0 else hp_max_cache
+			log("adaptive_memory: HP initial limit.high={} (cache range=[{}, {}])".format(
+				fmt_mb(hp_current_high), fmt_mb(hp_min_cache), fmt_mb(hp_max_cache)))
+
+		new_hp_high = hp_current_high
+		if lc_load <= hp_idle_threshold and hp_mem_delta <= 0:
+			# HP idle — shrink cache
+			target = lc_mem_current + safety_margin
+			if target < hp_min_cache:
+				target = hp_min_cache
+			new_hp_high = hp_current_high - ramp_step
+			if new_hp_high < target:
+				new_hp_high = target
+		elif lc_load >= hp_busy_threshold or hp_mem_delta > 0:
+			# HP busy — expand cache
+			new_hp_high = hp_current_high + ramp_step
+			if new_hp_high > hp_max_cache:
+				new_hp_high = hp_max_cache
+
+		# Clamp
+		if new_hp_high < hp_min_cache:
+			new_hp_high = hp_min_cache
+		if new_hp_high > hp_max_cache:
+			new_hp_high = hp_max_cache
+
+		if abs(new_hp_high - hp_current_high) > 1024 * 1024:
+			set_mem_limit_high(args.lcpid, gpu, new_hp_high)
+			if new_hp_high < hp_current_high:
+				log("adaptive_memory: HP limit.high {} -> {} (shrinking cache, load={})".format(
+					fmt_mb(hp_current_high), fmt_mb(new_hp_high), lc_load))
+			else:
+				log("adaptive_memory: HP limit.high {} -> {} (expanding cache, load={})".format(
+					fmt_mb(hp_current_high), fmt_mb(new_hp_high), lc_load))
+			hp_current_high = new_hp_high
+
+		# --- Phase 2: LP Dynamic Reservation ---
+		if lp_current_high is None:
+			lp_current_high = be_mem_limit_high if be_mem_limit_high > 0 else 0
+			lp_current_low = args.be_memlimit_low if args.be_memlimit_low > 0 else 0
+			log("adaptive_memory: LP initial limit.high={} limit.low={}".format(
+				fmt_mb(lp_current_high), fmt_mb(lp_current_low)))
+
+		# Available = GPU total - HP reserved - safety
+		hp_reserved = hp_current_high if hp_current_high > 0 else lc_mem_current
+		available = gpu_total - hp_reserved - safety_margin if gpu_total > 0 else 0
+
+		new_lp_low = lp_current_low
+		new_lp_high = lp_current_high
+
+		if lc_load <= hp_idle_threshold and hp_mem_delta <= 0:
+			# HP idle — give LP more memory
+			new_lp_low = lp_current_low + ramp_step
+			if new_lp_low > available:
+				new_lp_low = available
+			new_lp_high = available
+			if new_lp_high < new_lp_low:
+				new_lp_high = new_lp_low
+		elif lc_load >= hp_busy_threshold or hp_mem_delta > 0:
+			# HP busy — reclaim from LP
+			new_lp_low = lp_current_low - ramp_step
+			if new_lp_low < lp_min_reservation:
+				new_lp_low = lp_min_reservation
+			new_lp_high = lp_current_high - ramp_step
+			if new_lp_high < new_lp_low:
+				new_lp_high = new_lp_low
+
+		# Floor
+		if new_lp_low < lp_min_reservation:
+			new_lp_low = lp_min_reservation
+		if new_lp_high < lp_min_reservation:
+			new_lp_high = lp_min_reservation
+		if new_lp_high < new_lp_low:
+			new_lp_high = new_lp_low
+
+		if abs(new_lp_low - lp_current_low) > 1024 * 1024:
+			set_mem_limit_low(args.bepid, gpu, new_lp_low)
+			if new_lp_low > lp_current_low:
+				log("adaptive_memory: LP limit.low {} -> {} (reservation increased, available={})".format(
+					fmt_mb(lp_current_low), fmt_mb(new_lp_low), fmt_mb(available)))
+			else:
+				log("adaptive_memory: LP limit.low {} -> {} (reservation reduced, hp_load={})".format(
+					fmt_mb(lp_current_low), fmt_mb(new_lp_low), lc_load))
+			lp_current_low = new_lp_low
+
+		if abs(new_lp_high - lp_current_high) > 1024 * 1024:
+			set_mem_limit_high(args.bepid, gpu, new_lp_high)
+			if new_lp_high > lp_current_high:
+				log("adaptive_memory: LP limit.high {} -> {} (expanded)".format(
+					fmt_mb(lp_current_high), fmt_mb(new_lp_high)))
+			else:
+				log("adaptive_memory: LP limit.high {} -> {} (reclaimed, hp_load={})".format(
+					fmt_mb(lp_current_high), fmt_mb(new_lp_high), lc_load))
+			lp_current_high = new_lp_high
+
+		# --- Phase 3: Swap throttling ---
+		swap_override = False
+		if be_mem_limit_high > 0:
+			be_swap = get_mem_swap_current(args.bepid, gpu)
+			swap_ratio = be_swap / be_mem_limit_high if be_mem_limit_high > 0 else 0
+
+			if swap_cooldown_remaining > 0:
+				swap_cooldown_remaining -= 1
+				swap_override = True
+				if swap_cooldown_remaining == 0:
+					reschedule(args.bepid, gpu)
+					swap_is_frozen = False
+					log("adaptive_memory: swap cooldown expired, unfreeze BE")
+			elif swap_ratio >= swap_freeze_ratio:
+				if not swap_is_frozen:
+					preempt(args.bepid, gpu)
+					swap_is_frozen = True
+					swap_cooldown_remaining = swap_cooldown_ticks
+					log("adaptive_memory: SWAP FREEZE BE (ratio={:.3f})".format(swap_ratio))
+				swap_override = True
+			elif swap_ratio >= swap_throttle_ratio:
+				zone_width = swap_freeze_ratio - swap_throttle_ratio
+				t = (swap_ratio - swap_throttle_ratio) / zone_width if zone_width > 0 else 0.5
+				new_priority = int(4 + t * 8)
+				if new_priority != swap_throttle_priority:
+					set_priority(args.bepid, gpu, new_priority)
+					log("adaptive_memory: swap throttle BE priority -> {} (ratio={:.3f})".format(new_priority, swap_ratio))
+					swap_throttle_priority = new_priority
+				swap_override = True
+			elif swap_ratio < swap_clear_ratio:
+				if swap_throttle_priority is not None:
+					set_priority(args.bepid, gpu, 0)
+					log("adaptive_memory: swap cleared, BE priority -> 0")
+					swap_throttle_priority = None
+
+		# --- Phase 4: Compute policy (unless swap override) ---
+		if not swap_override:
+			if compute_policy == "dynamic_priority":
+				if lc_load >= extreme_threshold:
+					if not compute_is_frozen:
+						preempt(args.bepid, gpu)
+						compute_is_frozen = True
+						log("adaptive_memory/dynamic_priority: FREEZE BE (load={})".format(lc_load))
+				else:
+					if compute_is_frozen:
+						reschedule(args.bepid, gpu)
+						compute_is_frozen = False
+						log("adaptive_memory/dynamic_priority: UNFREEZE BE (load={})".format(lc_load))
+					target = idle_priority
+					if lc_load >= heavy_threshold:
+						target = heavy_priority
+					elif lc_load >= light_threshold:
+						target = light_priority
+					if target != compute_last_priority:
+						set_priority(args.bepid, gpu, target)
+						log("adaptive_memory/dynamic_priority: BE priority -> {} (load={})".format(target, lc_load))
+						compute_last_priority = target
+			elif compute_policy == "burst_freeze":
+				if lc_load > upper_threshold:
+					if not compute_is_frozen:
+						preempt(args.bepid, gpu)
+						compute_is_frozen = True
+						log("adaptive_memory/burst_freeze: FREEZE BE (load={})".format(lc_load))
+				elif lc_load < lower_threshold:
+					if compute_is_frozen:
+						reschedule(args.bepid, gpu)
+						compute_is_frozen = False
+						log("adaptive_memory/burst_freeze: UNFREEZE BE (load={})".format(lc_load))
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -908,3 +1219,5 @@ if __name__ == "__main__":
 		run_swap_throttling(args)
 	elif args.policy == "memory_aware":
 		run_memory_aware(args)
+	elif args.policy == "adaptive_memory":
+		run_adaptive_memory(args)
