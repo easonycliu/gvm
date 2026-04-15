@@ -73,7 +73,7 @@ fi
 
 model=
 if [ "$mode" == "text" ]; then
-	model="meta-llama/Llama3-3.2-3B"
+	model="meta-llama/Llama-3.2-3B"
 elif [ "$mode" == "video" ]; then
 	model="Qwen/Qwen2.5-VL-3B-Instruct"
 else

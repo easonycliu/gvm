@@ -72,7 +72,7 @@ default_config = {
     # to run the unmodified base Wan2.1 pipeline.
     "turbo_repo": "TurboDiffusion/TurboWan2.1-T2V-1.3B-480P",
     "turbo_ckpt": "TurboWan2.1-T2V-1.3B-480P.pth",
-    "batch_size": 2,
+    "batch_size": 1,
     # Turbo/distilled models converge in very few steps with CFG=1.
     "num_inference_steps": 4,
     "guidance_scale": 1.0,

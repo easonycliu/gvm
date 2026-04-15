@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 FONT_SIZE = 15
 FIGURE_SIZE = (14, 2.8)
 # Canonical ordering - methods not present in data are automatically skipped
-ALL_METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'exclusive']
+ALL_METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'GVMCOOP', 'exclusive']
 HATCH_PATTERNS = ['/', '\\', 'x', 'o', '+', '.']
 STUCK_SENTINEL = 'STUCK'
 VLLM_SPACING_REDUCTION = 0.65  # Reduce vLLM subplot gaps to 65% of original
@@ -25,6 +25,7 @@ METHOD_COLORS = {
     'xsched': 'tab:green',
     'GVM': 'tab:purple',
     'GVMDYN': 'tab:pink',
+    'GVMCOOP': 'tab:brown',
     'exclusive': 'tab:red'
 }
 EXCLUSIVE_LINE_COLOR = 'tab:red'
@@ -291,7 +292,7 @@ def main():
                                 linewidth=EXCLUSIVE_LINE_WIDTH, label='Exclusive'))
 
     if SHOW_LEGEND:
-        fig.legend(handles=legend_handles, loc=(0.23, 0.88),
+        fig.legend(handles=legend_handles, loc=(0.08, 0.88),
                    ncol=len(legend_handles), frameon=False)
 
     # Save plot

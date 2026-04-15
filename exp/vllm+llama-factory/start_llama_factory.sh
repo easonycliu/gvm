@@ -52,7 +52,7 @@ if [ "$method" == "MIG" ] && [ -z $device ]; then
 fi
 
 if [ -z $config ]; then
-	config=$script_dir/qwen2_5_lora_sft.yaml
+	config=$script_dir/llama3_lora_sft.yaml
 fi
 
 if [ "$method" == "GVM" ]; then
