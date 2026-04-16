@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
+# Display name aliases (directory name -> display name)
+ALIAS = {"GVM": "GhostFT", "GVMDYN": "GhostFT", "GVMCOOP": "GhostAC"}
+
 # Global Configuration
 FONT_SIZE = 15
 FIGURE_SIZE = (14, 2.8)
@@ -23,7 +26,7 @@ METHOD_COLORS = {
     'TGS': 'tab:blue',
     'GPreempt': 'tab:orange',
     'xsched': 'tab:green',
-    'GVM': 'tab:purple',
+    'GVM': 'tab:pink',
     'GVMDYN': 'tab:pink',
     'GVMCOOP': 'tab:brown',
     'exclusive': 'tab:red'
@@ -39,6 +42,10 @@ VLLM_METRICS = [
     ('Median ITL (ms)', 'Median ITL (ms)', 1.0, False),
     ('P99 ITL (ms)', 'P99 ITL (ms)', 1.0, False),
 ]
+
+def _display_name(method):
+    """Return the display name for a method, applying ALIAS if defined."""
+    return ALIAS.get(method, method)
 
 def _is_stuck(value):
     """Check if a value represents a stuck result."""
@@ -95,7 +102,8 @@ def get_color_map():
 def create_bar_plot(ax, values, method_names, color_map, hatch_map):
     """Create bar plot, rendering STUCK placeholders for stuck values."""
     plot_values = [0 if v == STUCK_SENTINEL else v for v in values]
-    bars = ax.bar(method_names, plot_values, color='white', edgecolor='black', linewidth=1.5)
+    display_names = [_display_name(m) for m in method_names]
+    bars = ax.bar(display_names, plot_values, color='white', edgecolor='black', linewidth=1.5)
     stuck_xs = []
     for bar, method, val in zip(bars, method_names, values):
         if val == STUCK_SENTINEL:
@@ -284,7 +292,7 @@ def main():
     # Add legend - match bar appearance: white fill, colored edge, hatch pattern
     legend_handles = [
         mpatches.Patch(facecolor='white', edgecolor=color_map[method],
-                      hatch=hatch_map[method], linewidth=2.5, label=method)
+                      hatch=hatch_map[method], linewidth=2.5, label=_display_name(method))
         for method in bar_methods
     ]
     legend_handles.append(Line2D([], [], color=EXCLUSIVE_LINE_COLOR,

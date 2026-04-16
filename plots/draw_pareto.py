@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
+# Display name aliases (directory name -> display name)
+ALIAS = {"GVM": "Ghost", "GVMDYN": "GhostFT", "GVMCOOP": "GhostAC"}
+
+def _display_name(method):
+    """Return the display name for a method, applying ALIAS if defined."""
+    return ALIAS.get(method, method)
+
 parser = argparse.ArgumentParser(description="Script for drawing pareto fig")
 
 parser.add_argument("--input", type=str, required=True, help="Path to input data")
@@ -80,7 +87,8 @@ if __name__ == "__main__":
         'GPreempt': palette[1],
         'xsched': palette[2],
         'GVM': 'tab:purple',
-        'GVMDYN': 'tab:pink'
+        'GVMDYN': 'tab:pink',
+        'GVMCOOP': 'tab:brown'
     }
 
     # Define markers for different systems
@@ -89,18 +97,22 @@ if __name__ == "__main__":
         'GPreempt': 's',
         'xsched': '^',
         'GVM': 'D',
-        'GVMDYN': 'D'
+        'GVMDYN': 'D',
+        'GVMCOOP': 'D'
     }
 
     # Categorize methods by system
     def get_system(method):
         print(method)
-        if method.startswith('GVM') and not method.startswith('GVMDYN') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
-            print('GVM')
-            return 'GVM'
+        if method.startswith('GVMCOOP'):
+            print('GVMCOOP')
+            return 'GVMCOOP'
         elif method.startswith('GVMDYN'):
             print('GVMDYN')
             return 'GVMDYN'
+        elif method.startswith('GVM') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
+            print('GVM')
+            return 'GVM'
         elif method == 'TGS':
             return 'TGS'
         elif method == 'GPreempt':
@@ -140,7 +152,9 @@ if __name__ == "__main__":
     # Plot points grouped by system with different colors and markers
     legend_handles = []
     # Define legend order to match bar chart (excluding exclusive)
-    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN']
+    # Legend order: 3x2 grid with Ghost family in second column
+    # Row-by-row: TGS|Ghost, GPreempt|GhostFT, xsched|GhostAC
+    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'GVMCOOP']
 
     for system in legend_order:
         if system in system_groups and system in methods_color_map:
@@ -174,7 +188,7 @@ if __name__ == "__main__":
             legend_handles.append(Line2D([], [], color=methods_color_map[system],
                                        marker=methods_marker_map[system],
                                        linestyle='None', markersize=8,
-                                       label=system if system != 'xsched' else 'XSched'))
+                                       label=_display_name(system) if system != 'xsched' else 'XSched'))
 
     # # Label each point (simplified labels for GVM)
     # for i, k in enumerate(keys):
@@ -198,7 +212,7 @@ if __name__ == "__main__":
 
 
     # Add legend
-    plt.legend(handles=legend_handles, loc=(0.48, .55), frameon=False,fontsize=14)
+    plt.legend(handles=legend_handles, loc=(0.15, 0.75), ncol=2, columnspacing=0.2, frameon=False, fontsize=12)
     plt.tight_layout()
 
     plt.savefig(os.path.join(args.output, "{}_pareto.pdf".format("+".join(applications))))
