@@ -31,3 +31,6 @@
 [submodule "sglang"]
 	path = playground/infer/sglang
 	url = git@github.com:sgl-project/sglang.git
+[submodule "gvm-notify"]
+	path = gvm-notify
+	url = git@github.com:easonycliu/gvm-notify.git
