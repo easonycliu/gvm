@@ -1,5 +1,14 @@
 #!/bin/bash
 
+exp_dir=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+experiment_dir=$(realpath "$PWD")
+be_launcher=$experiment_dir/start_be.sh
+
+if [ ! -f "$be_launcher" ]; then
+	echo "Run this script from an experiment directory containing start_be.sh"
+	exit 1
+fi
+
 method=
 duration=
 dataset=
@@ -75,7 +84,7 @@ fi
 
 scheduler_pid=
 if [ "$method" == "xsched" ]; then
-	./launch_xserver.sh &
+	$exp_dir/launch_xserver.sh &
 	scheduler_pid=$!
 fi
 
@@ -88,16 +97,6 @@ else
 	echo "Unsupported mode $mode"
 	exit
 fi
-diffusion_model=
-if [ "$mode" == "text" ]; then
-	diffusion_model="sd3"
-elif [ "$mode" == "video" ]; then
-	diffusion_model="wan"
-else
-	echo "Unsupported mode $mode"
-	exit
-fi
-
 server_pid=
 server_pid_file=$(mktemp)
 server_script_pid=
@@ -108,29 +107,29 @@ preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
 if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --memlimit=$lcmemlimit --priority=$lcpriority &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --memlimit=$lcmemlimit --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=$bememlimit --priority=$bepriority --model=$diffusion_model &
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --memlimit=$bememlimit --priority=$bepriority --mode=$mode &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --device=$lcdevice &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --device=$lcdevice &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --device=$bedevice --model=$diffusion_model &
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --device=$bedevice --mode=$mode &
 	preempt_script_pid=$!
 else
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --model=$diffusion_model &
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode &
 	preempt_script_pid=$!
 fi
 
 echo "Waiting for system startup"
 sleep 90
 
-./start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset &
+$exp_dir/start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset &
 client_script_pid=$!
 
 while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
@@ -144,7 +143,7 @@ preempt_pid=$(cat $preempt_pid_file)
 rm -f $preempt_pid_file
 
 if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	sudo ./launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit &
+	sudo $exp_dir/launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit &
 	scheduler_pid=$!
 fi
 

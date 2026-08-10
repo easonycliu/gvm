@@ -1,7 +1,7 @@
 #!/bin/bash
 
 script_dir=$(dirname ${BASH_SOURCE[0]})
-project_dir=$(realpath $script_dir/../..)
+project_dir=$(realpath $script_dir/..)
 
 pidfile=
 mode=
@@ -61,7 +61,7 @@ else
 	exit
 fi
 
-# python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log
+# python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/apps/vllm/benchmark_log
 
 rootpid=$!
 if [ -n $pidfile ]; then
