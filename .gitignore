@@ -38,3 +38,6 @@ cuda/*
 *.bak
 
 /GVM__ASPLOS_27_
+
+/bak
+/venv

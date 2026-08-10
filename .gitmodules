@@ -1,36 +1,24 @@
-[submodule "open-gpu-kernel-modules"]
-	path = open-gpu-kernel-modules
-	url = git@github.com:ivanium/gvm-nvidia-driver-modules.git
-[submodule "cuda_custom"]
-	path = cuda_custom
-	url = git@github.com:easonycliu/CUDADriverCustom.git
-[submodule "cuda"]
-	path = cuda
-	url = https://github.com/easonycliu/cuda12.9-driver575.57.08.git
-[submodule "grublist"]
-	path = tools/grublist
-	url = git@github.com:easonycliu/grublist.git
-[submodule "llama.cpp"]
-	path = playground/infer/llama.cpp
-	url = git@github.com:easonycliu/GCGroupLlama.cpp.git
-[submodule "vllm"]
-	path = playground/infer/vllm
-	url = git@github.com:easonycliu/GVMvllm.git
-[submodule "LLaMA-Factory"]
-	path = playground/train/LLaMA-Factory
-	url = git@github.com:easonycliu/GVMLLaMA-Factory.git
-[submodule "GPreempt"]
-	path = 3rdparty/GPreempt
-	url = git@github.com:easonycliu/GVMGPreempt.git
-[submodule "TGS"]
-	path = 3rdparty/TGS
-	url = git@github.com:easonycliu/GVMTGS.git
-[submodule "xsched"]
-	path = 3rdparty/GPreempt
-	url = git@github.com:easonycliu/GVMXsched.git
-[submodule "sglang"]
-	path = playground/infer/sglang
-	url = git@github.com:sgl-project/sglang.git
+[submodule "gvm-gpu-kernel-modules"]
+	path = gvm-gpu-kernel-modules
+	url = git@github.com:easonycliu/gvm-nvidia-driver-modules.git
+[submodule "gvm-cuda-driver"]
+	path = gvm-cuda-driver
+	url = git@github.com:easonycliu/gvm-cuda-driver.git
 [submodule "gvm-notify"]
 	path = gvm-notify
 	url = git@github.com:easonycliu/gvm-notify.git
+[submodule "GPreempt"]
+	path = 3rdparty/GPreempt
+	url = git@github.com:easonycliu/gvm-gpreempt.git
+[submodule "TGS"]
+	path = 3rdparty/TGS
+	url = git@github.com:easonycliu/gvm-tgs.git
+[submodule "xsched"]
+	path = 3rdparty/GPreempt
+	url = git@github.com:easonycliu/gvm-xsched.git
+[submodule "vllm"]
+	path = apps/vllm
+	url = git@github.com:easonycliu/gvm-vllm.git
+[submodule "LLaMA-Factory"]
+	path = apps/LLaMA-Factory
+	url = git@github.com:easonycliu/gvm-llama-factory.git
