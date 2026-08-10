@@ -6,8 +6,14 @@ import signal
 import time
 import ctypes
 
+from enum import Enum
+
 CGROUP_BASE_DIR = "/sys/kernel/debug/nvidia-uvm/processes"
 CHECKING_INTERVAL_MS = 100
+OPERATE_INTERVAL_MIN_MS = 3000
+SLIDE_WINDOW_SIZE = 30
+PENDING_KERNEL_UPPER_THRESHOLD = 128
+PENDING_KERNEL_LOWER_THRESHOLD = 4
 
 def parse_args():
 	parser = argparse.ArgumentParser(
@@ -39,6 +45,14 @@ def parse_args():
 	)
 	return parser.parse_args()
 
+def preempt(pid):
+	print("Preempt {}".format(pid))
+	os.kill(pid, signal.SIGSTOP)
+
+def reschedule(pid):
+	print("Reschedule {}".format(pid))
+	os.kill(pid, signal.SIGCONT)
+
 def set_mem_limit(pid, limit):
 	print("Set {}'s memory limit to {}".format(pid, limit))
 	with open(os.path.join(CGROUP_BASE_DIR, str(pid), "0", "memory.limit.high"), "w") as f:
@@ -60,6 +74,11 @@ def get_gcgroup_stat(pid):
 
 	return nr_submitted_kernels, nr_ended_kernels, nr_pending_kernels
 
+class BE_STATUS(Enum):
+	UNLIMITED=0
+	LIMITED=1
+	PREEMPTED=2
+
 if __name__ == "__main__":
 	args = parse_args()
 	if args.bememlimit == -1:
@@ -67,9 +86,12 @@ if __name__ == "__main__":
 	if args.lcmemlimit == -1:
 		args.lcmemlimit = ctypes.c_ulong(-1).value
 
-	# TODO: implement scheduling policy (e.g., monitor gcgroup.stat
-	# and adjust memory limits / preempt based on pending kernels).
+	nr_pending_kernels_list = [0 for _ in range(SLIDE_WINDOW_SIZE)]
+	nr_submitted_kernels_list = [0 for _ in range(SLIDE_WINDOW_SIZE)]
+	operate_time = 0.0
+	be_status = BE_STATUS.UNLIMITED
 	while True:
+		time.sleep(CHECKING_INTERVAL_MS / 1000)
 		nr_submitted_kernels, nr_ended_kernels, nr_pending_kernels = get_gcgroup_stat(args.lcpid)
 		nr_pending_kernels_list.append(nr_pending_kernels)
 		nr_submitted_kernels_list.append(nr_submitted_kernels)

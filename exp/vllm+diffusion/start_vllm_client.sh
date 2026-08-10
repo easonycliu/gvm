@@ -50,12 +50,12 @@ if [ -z $dataset ]; then
 fi
 
 echo "Running burstgpt"
-source $project_dir/playground/infer/venv/vllm/bin/activate
+source $project_dir/venv/VllmVenv/bin/activate
 set -x
 if [ "$mode" == "text" ]; then
-	python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+	python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name burstgpt --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/apps/vllm/benchmark_log &
 elif [ "$mode" == "video" ]; then
-	python3 $project_dir/playground/infer/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/playground/infer/vllm/benchmark_log &
+	python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/apps/vllm/benchmark_log &
 else
 	echo "Unsupported mode $mode"
 	exit

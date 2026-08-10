@@ -5,6 +5,8 @@ duration=
 dataset=
 lcpriority=2
 bepriority=10
+lcmemlimit=60000000000
+bememlimit=40000000000
 lcdevice=
 bedevice=
 mode=
@@ -24,6 +26,12 @@ for flag in "$@"; do
 			;;
 		--bepriority=*)
 			bepriority=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--lcmemlimit=*)
+			lcmemlimit=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--bememlimit=*)
+			bememlimit=$(echo $flag | awk -F = '{print $2}')
 			;;
 		--lcdevice=*)
 			lcdevice=$(echo $flag | awk -F = '{print $2}')
@@ -99,11 +107,11 @@ client_script_pid=
 preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
-if [ "$method" == "GVM" ]; then
-	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --memlimit=60000000000 --priority=$lcpriority &
+if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
+	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --memlimit=$lcmemlimit --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
-	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=40000000000 --priority=$bepriority --model=$diffusion_model &
+	./start_diffusion.sh --pidfile=$preempt_pid_file --method=$method --memlimit=$bememlimit --priority=$bepriority --model=$diffusion_model &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
 	./start_vllm_server.sh --pidfile=$server_pid_file --method=$method --mode=$mode --model=$model --device=$lcdevice &
@@ -135,8 +143,8 @@ while [ ! -s "$preempt_pid_file" ]; do sleep 0.5; done
 preempt_pid=$(cat $preempt_pid_file)
 rm -f $preempt_pid_file
 
-if [ "$method" == "GVM" ]; then
-	sudo ./launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit -1 --bememlimit 6000000000 &
+if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
+	sudo ./launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit &
 	scheduler_pid=$!
 fi
 
