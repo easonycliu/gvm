@@ -89,7 +89,7 @@ if __name__ == "__main__":
 	nr_pending_kernels_list = [0 for _ in range(SLIDE_WINDOW_SIZE)]
 	nr_submitted_kernels_list = [0 for _ in range(SLIDE_WINDOW_SIZE)]
 	operate_time = 0.0
-	be_status = BE_STATUS.UNLIMITED
+	be_status = BE_STATUS.LIMITED
 	while True:
 		time.sleep(CHECKING_INTERVAL_MS / 1000)
 		nr_submitted_kernels, nr_ended_kernels, nr_pending_kernels = get_gcgroup_stat(args.lcpid)
