@@ -8,6 +8,8 @@ mode=
 model=
 prompts=
 dataset=
+result_dir=
+result_filename=
 
 for flag in "$@"; do
 	case $flag in
@@ -25,6 +27,12 @@ for flag in "$@"; do
 			;;
 		--dataset=*)
 			dataset=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--result-dir=*)
+			result_dir=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--result-filename=*)
+			result_filename=$(echo $flag | awk -F = '{print $2}')
 			;;
 		*)
 			echo "Unknown command-line flag" $flag
@@ -48,15 +56,19 @@ if [ -z $dataset ]; then
 	echo "Missing operand: --dataset"
 	exit
 fi
+if [ -z "$result_dir" ] || [ -z "$result_filename" ]; then
+	echo "Missing result destination"
+	exit
+fi
 
 echo "Running burstgpt"
 set -x
 if [ "$mode" == "text" ]; then
 	source $project_dir/venv/BenchmarkVenv/bin/activate
-	python3 $project_dir/apps/benchmark/benchmark_serving.py --model $model --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --result-dir $project_dir/apps/vllm/benchmark_log &
+	python3 $project_dir/apps/benchmark/benchmark_serving.py --model $model --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --result-dir $result_dir --result-filename $result_filename &
 elif [ "$mode" == "video" ]; then
 	source $project_dir/venv/VllmVenv/bin/activate
-	python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $project_dir/apps/vllm/benchmark_log &
+	python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $result_dir --result-filename $result_filename &
 else
 	echo "Unsupported mode $mode"
 	exit

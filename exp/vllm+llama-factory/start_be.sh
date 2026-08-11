@@ -115,6 +115,5 @@ elif [ "$method" == "GPreempt" ]; then
 	$project_dir/exp/setup_cgroup.sh --priority=15 --memlimit=400000000000 --rootpid=$rootpid
 fi
 
-trap "wait $rootpid; mv $script_dir/saves/llama3.2-3b $script_dir/saves/llama3.2-3b-$(date +%Y%m%d-%H%M%S); exit" INT
+trap "wait $rootpid; exit" INT
 wait $rootpid
-mv $script_dir/saves/llama3.2-3b $script_dir/saves/llama3.2-3b-$(date +%Y%m%d-%H%M%S)
