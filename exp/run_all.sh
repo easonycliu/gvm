@@ -203,23 +203,24 @@ fi
 echo "Waiting for system startup"
 sleep 90
 
-$exp_dir/start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset --result-dir=$output_dir --result-filename=$vllm_result_filename &
-client_script_pid=$!
-
 while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
 server_pid=$(cat $server_pid_file)
 rm -f $server_pid_file
-while [ ! -s "$client_pid_file" ]; do sleep 0.5; done
-client_pid=$(cat $client_pid_file)
-rm -f $client_pid_file
 while [ ! -s "$preempt_pid_file" ]; do sleep 0.5; done
 preempt_pid=$(cat $preempt_pid_file)
 rm -f $preempt_pid_file
 
 if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	sudo $exp_dir/launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit &
+	mkdir -p $exp_dir/scheduler_logs
+	sudo $exp_dir/launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit --trace-file=$exp_dir/scheduler_logs/scheduler-$method_label-$result_timestamp.csv &
 	scheduler_pid=$!
 fi
+
+$exp_dir/start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset --result-dir=$output_dir --result-filename=$vllm_result_filename &
+client_script_pid=$!
+while [ ! -s "$client_pid_file" ]; do sleep 0.5; done
+client_pid=$(cat $client_pid_file)
+rm -f $client_pid_file
 
 interrupt_experiment() {
 	kill -2 $client_pid $server_script_pid 2>/dev/null
