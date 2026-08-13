@@ -10,8 +10,9 @@ The setup below assumes Ubuntu, an NVIDIA Ampere-or-newer GPU, Python 3.12,
 and CUDA 12.x.
 
 ```bash
-git submodule update --init --recursive
-cd ~/gvm
+git clone https://github.com/easonycliu/gvm.git
+cd gvm
+git submodule update --init --recursive --progress
 ```
 
 # Setup

@@ -7,9 +7,6 @@
 [submodule "gvm-notify"]
 	path = gvm-notify
 	url = https://github.com/easonycliu/gvm-notify.git
-[submodule "GPreempt"]
-	path = 3rdparty/GPreempt
-	url = https://github.com/easonycliu/gvm-gpreempt.git
 [submodule "TGS"]
 	path = 3rdparty/TGS
 	url = https://github.com/easonycliu/gvm-tgs.git
