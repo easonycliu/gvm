@@ -76,6 +76,9 @@ fi
 if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
 	source $project_dir/venv/DiffusionVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file &
+elif [ "$method" == "exclusive-be" ]; then
+	source $project_dir/venv/DiffusionVenv/bin/activate
+	python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file &
 elif [ "$method" == "GPreempt" ]; then
 	source $project_dir/venv/DiffusionVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file &

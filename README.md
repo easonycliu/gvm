@@ -232,6 +232,20 @@ All checks passed.
 
 # Evaluation
 
+Standalone baselines run only one side of the experiment. The LC-only run
+requires a request dataset; the BE-only run does not:
+
+```bash
+cd exp/vllm+<diffusion|llama-factory>
+../run_all.sh --method=exclusive-lc --duration=600 \
+  --dataset=<path-to-dataset> --eval=overall
+../run_all.sh --method=exclusive-be --duration=600 --eval=overall
+```
+
+The two runs produce independently timestamped files. Plotting scripts select
+the latest LC-only and BE-only files separately and use them as the Exclusive
+reference.
+
 Run `run_all.sh` from one of the two experiment directories. Results are stored
 under `data/<evaluation>/<experiment>/`; filenames include the method,
 priorities where applicable, and a timestamp. `GVM` uses fixed limits and

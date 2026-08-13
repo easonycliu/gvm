@@ -75,7 +75,17 @@ if [ -z $duration ]; then
 	echo "Missing operand: --duration"
 	exit
 fi
-if [ -z $dataset ]; then
+launch_lc=1
+launch_be=1
+case $method in
+	exclusive-lc)
+		launch_be=0
+		;;
+	exclusive-be)
+		launch_lc=0
+		;;
+esac
+if [ "$launch_lc" -eq 1 ] && [ -z $dataset ]; then
 	echo "Missing operand: --dataset"
 	exit
 fi
@@ -182,7 +192,15 @@ client_script_pid=
 preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
-if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
+if [ "$method" == "exclusive-lc" ]; then
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model &
+	server_script_pid=$!
+	# Preserve the same vLLM warm-up time used by paired experiments.
+	sleep 60
+elif [ "$method" == "exclusive-be" ]; then
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode $be_output_arg &
+	preempt_script_pid=$!
+elif [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
 	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model --memlimit=$lcmemlimit --priority=$lcpriority &
 	server_script_pid=$!
 	sleep 60
@@ -205,15 +223,17 @@ fi
 echo "Waiting for system startup"
 sleep 90
 
-while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
-server_pid=$(cat $server_pid_file)
-rm -f $server_pid_file
-while [ ! -s "$server_control_pid_file" ]; do sleep 0.5; done
-server_control_pid=$(cat $server_control_pid_file)
-rm -f $server_control_pid_file
-while [ ! -s "$preempt_pid_file" ]; do sleep 0.5; done
-preempt_pid=$(cat $preempt_pid_file)
-rm -f $preempt_pid_file
+if [ "$launch_lc" -eq 1 ]; then
+	while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
+	server_pid=$(cat $server_pid_file)
+	while [ ! -s "$server_control_pid_file" ]; do sleep 0.5; done
+	server_control_pid=$(cat $server_control_pid_file)
+fi
+if [ "$launch_be" -eq 1 ]; then
+	while [ ! -s "$preempt_pid_file" ]; do sleep 0.5; done
+	preempt_pid=$(cat $preempt_pid_file)
+fi
+rm -f "$server_pid_file" "$server_control_pid_file" "$preempt_pid_file"
 
 if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
 	mkdir -p $exp_dir/scheduler_logs
@@ -221,11 +241,13 @@ if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
 	scheduler_pid=$!
 fi
 
-$exp_dir/start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset --result-dir=$output_dir --result-filename=$vllm_result_filename &
-client_script_pid=$!
-while [ ! -s "$client_pid_file" ]; do sleep 0.5; done
-client_pid=$(cat $client_pid_file)
-rm -f $client_pid_file
+if [ "$launch_lc" -eq 1 ]; then
+	$exp_dir/start_vllm_client.sh --pidfile=$client_pid_file --mode=$mode --model=$model --prompts=16384 --dataset=$dataset --result-dir=$output_dir --result-filename=$vllm_result_filename &
+	client_script_pid=$!
+	while [ ! -s "$client_pid_file" ]; do sleep 0.5; done
+	client_pid=$(cat $client_pid_file)
+fi
+rm -f "$client_pid_file"
 
 wait_for_child() {
 	local child_pid=$1
@@ -284,9 +306,11 @@ shutdown_experiment() {
 
 	# The standalone benchmark catches INT, cancels outstanding requests, and
 	# serializes all completed-request metrics before its launcher exits.
-	stop_launcher "$client_script_pid" "$client_pid" INT 30 "vLLM benchmark"
+	if [ "$launch_lc" -eq 1 ]; then
+		stop_launcher "$client_script_pid" "$client_pid" INT 30 "vLLM benchmark"
+	fi
 
-	if [ -n "$llamafactory_result" ]; then
+	if [ "$launch_be" -eq 1 ] && [ -n "$llamafactory_result" ]; then
 		# LLaMA Factory cannot leave a reliable signal handler in a blocked CUDA
 		# call. Its JSONL log is durable, so terminate it and extract afterward.
 		kill -CONT "$preempt_pid" 2>/dev/null || true
@@ -295,13 +319,15 @@ shutdown_experiment() {
 			kill -KILL "$preempt_script_pid" 2>/dev/null || true
 			wait "$preempt_script_pid" 2>/dev/null || true
 		}
-	else
+	elif [ "$launch_be" -eq 1 ]; then
 		# Diffusion writes its collected latencies from its INT handler. Allow
 		# the current GPU batch to return before escalating.
 		stop_launcher "$preempt_script_pid" "$preempt_pid" INT 120 "diffusion"
 	fi
 
-	stop_launcher "$server_script_pid" "$server_control_pid" INT 30 "vLLM server"
+	if [ "$launch_lc" -eq 1 ]; then
+		stop_launcher "$server_script_pid" "$server_control_pid" INT 30 "vLLM server"
+	fi
 }
 trap shutdown_experiment SIGINT SIGTERM
 
@@ -309,7 +335,7 @@ sleep $duration
 
 shutdown_experiment
 
-if [ -n "$llamafactory_result" ]; then
+if [ "$launch_be" -eq 1 ] && [ -n "$llamafactory_result" ]; then
 	if [ ! -f "$llamafactory_log" ] && [ -f "${llamafactory_log%l}" ]; then
 		llamafactory_log=${llamafactory_log%l}
 	fi

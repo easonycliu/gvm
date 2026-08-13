@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
-from result_files import latest_complete_results
+from result_files import latest_complete_results, latest_result
 
 # Public artifact names. Legacy result filenames are normalized separately in
 # result_files.py and should not affect labels shown in figures.
@@ -75,15 +75,26 @@ if __name__ == "__main__":
             )
             print(f"Selected {application}/{method}: {path.name}")
 
-    # Get diffusion_exclusive baseline for normalization
-    diffusion_exclusive_baseline = results["diffusion"].get("diffusion-exclusive", None)
+    exclusive_files = {
+        "vllm": latest_result(args.input, "vllm", "exclusive-lc"),
+        "diffusion": latest_result(args.input, "diffusion", "exclusive-be"),
+    }
+    if all(exclusive_files.values()):
+        for application, path in exclusive_files.items():
+            results[application]["exclusive"] = calculate_metric(
+                application, path, args.slo
+            )
+            print(f"Selected {application}/exclusive: {path.name}")
+
+    # Normalize against the newest standalone BE run.
+    diffusion_exclusive_baseline = results["diffusion"].get("exclusive", None)
 
     # Extract common keys (methods) - only use keys that exist in both datasets
     vllm_keys = set(results["vllm"].keys())
     diffusion_keys = set(results["diffusion"].keys())
     common_keys = vllm_keys.intersection(diffusion_keys)
     # Filter out exclusive data points from plotting
-    common_keys = [k for k in common_keys if k not in ["diffusion-exclusive", "vllm-exclusive"]]
+    common_keys = [k for k in common_keys if k != "exclusive"]
     keys = sorted(common_keys)
 
     # Define color scheme and markers matching bar chart

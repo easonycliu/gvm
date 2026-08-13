@@ -23,6 +23,29 @@ def canonical_label(label: str) -> str:
     return head + (separator + tail if separator else "")
 
 
+def latest_result(
+    input_path: str, application: str, requested_label: str
+) -> Path | None:
+    """Return the newest result for one application and exact label.
+
+    Standalone LC and BE runs intentionally have different timestamps, so
+    they cannot use the complete-pair selection applied to colocated runs.
+    """
+    newest: tuple[str, Path] | None = None
+    for path in Path(input_path).iterdir():
+        if not path.is_file():
+            continue
+        match = RESULT_FILE.match(path.name)
+        if match is None or match.group("application") != application:
+            continue
+        if canonical_label(match.group("label")) != requested_label:
+            continue
+        timestamp = match.group("timestamp")
+        if newest is None or timestamp > newest[0]:
+            newest = (timestamp, path)
+    return newest[1] if newest else None
+
+
 def latest_complete_results(
     input_path: str,
     applications: list[str],

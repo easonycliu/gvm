@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
-from result_files import latest_complete_results
+from result_files import latest_complete_results, latest_result
 
 # Public artifact names. Legacy result filenames are normalized separately in
 # result_files.py and should not affect labels shown in figures.
@@ -104,6 +104,18 @@ def load_data(input_path):
             results[application][method] = calculate_metric(application, path)
             print(f"Selected {application}/{method}: {path.name}")
         detected_methods.add(method)
+
+    # Exclusive LC and BE are separate runs and therefore do not share a
+    # timestamp. Select the newest result for each side independently.
+    exclusive_files = {
+        applications[0]: latest_result(input_path, applications[0], "exclusive-lc"),
+        applications[1]: latest_result(input_path, applications[1], "exclusive-be"),
+    }
+    if all(exclusive_files.values()):
+        for application, path in exclusive_files.items():
+            results[application]["exclusive"] = calculate_metric(application, path)
+            print(f"Selected {application}/exclusive: {path.name}")
+        detected_methods.add("exclusive")
 
     # Filter and order methods based on what's actually in the data
     methods_order = [m for m in ALL_METHODS_ORDER if m in detected_methods]
