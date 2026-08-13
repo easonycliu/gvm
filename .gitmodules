@@ -1,24 +1,24 @@
 [submodule "gvm-gpu-kernel-modules"]
 	path = gvm-gpu-kernel-modules
-	url = git@github.com:easonycliu/gvm-nvidia-driver-modules.git
+	url = https://github.com/easonycliu/gvm-nvidia-driver-modules.git
 [submodule "gvm-cuda-driver"]
 	path = gvm-cuda-driver
-	url = git@github.com:easonycliu/gvm-cuda-driver.git
+	url = https://github.com/easonycliu/gvm-cuda-driver.git
 [submodule "gvm-notify"]
 	path = gvm-notify
-	url = git@github.com:easonycliu/gvm-notify.git
+	url = https://github.com/easonycliu/gvm-notify.git
 [submodule "GPreempt"]
 	path = 3rdparty/GPreempt
-	url = git@github.com:easonycliu/gvm-gpreempt.git
+	url = https://github.com/easonycliu/gvm-gpreempt.git
 [submodule "TGS"]
 	path = 3rdparty/TGS
-	url = git@github.com:easonycliu/gvm-tgs.git
+	url = https://github.com/easonycliu/gvm-tgs.git
 [submodule "xsched"]
 	path = 3rdparty/xsched
-	url = git@github.com:easonycliu/gvm-xsched.git
+	url = https://github.com/easonycliu/gvm-xsched.git
 [submodule "vllm"]
 	path = apps/vllm
-	url = git@github.com:easonycliu/gvm-vllm.git
+	url = https://github.com/easonycliu/gvm-vllm.git
 [submodule "LLaMA-Factory"]
 	path = apps/LLaMA-Factory
-	url = git@github.com:easonycliu/gvm-llama-factory.git
+	url = https://github.com/easonycliu/gvm-llama-factory.git
