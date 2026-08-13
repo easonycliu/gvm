@@ -125,10 +125,10 @@ case $method in
 		method_label=GVM-$lcpriority-$bepriority
 		;;
 	GVMFT)
-		method_label=GVMDYN-$lcpriority-$bepriority
+		method_label=GVMFT-$lcpriority-$bepriority
 		;;
 	GVMAC)
-		method_label=GVMCOOP
+		method_label=GVMAC
 		;;
 	*)
 		method_label=$method

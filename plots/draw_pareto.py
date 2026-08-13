@@ -6,8 +6,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
-# Display name aliases (directory name -> display name)
-ALIAS = {"GVM": "Ghost", "GVMDYN": "GhostFT", "GVMCOOP": "GhostAC"}
+from result_files import latest_complete_results
+
+# Public artifact names. Legacy result filenames are normalized separately in
+# result_files.py and should not affect labels shown in figures.
+ALIAS = {"GVM": "GVM", "GVMFT": "GVMFT", "GVMAC": "GVMAC"}
 
 def _display_name(method):
     """Return the display name for a method, applying ALIAS if defined."""
@@ -60,14 +63,17 @@ if __name__ == "__main__":
     applications = os.path.basename(os.path.normpath(args.input)).split("+")
     results = { application : {} for application in applications }
 
-    # First pass: collect all data including exclusive baselines
-    for file in os.listdir(args.input):
-        application = file.split("-")[0]
-        method = "-".join(file.split("-")[1:-2])
+    # Select the newest complete vLLM/diffusion pair for each configuration.
+    selected = latest_complete_results(args.input, applications)
+    for method, files in selected.items():
         # Filter out "-28G" data points
         if "-28G" in method:
             continue
-        results[application][method] = calculate_metric(application, os.path.join(args.input, file), args.slo)
+        for application, path in files.items():
+            results[application][method] = calculate_metric(
+                application, path, args.slo
+            )
+            print(f"Selected {application}/{method}: {path.name}")
 
     # Get diffusion_exclusive baseline for normalization
     diffusion_exclusive_baseline = results["diffusion"].get("diffusion-exclusive", None)
@@ -87,8 +93,8 @@ if __name__ == "__main__":
         'GPreempt': palette[1],
         'xsched': palette[2],
         'GVM': 'tab:purple',
-        'GVMDYN': 'tab:pink',
-        'GVMCOOP': 'tab:brown'
+        'GVMFT': 'tab:pink',
+        'GVMAC': 'tab:brown'
     }
 
     # Define markers for different systems
@@ -97,19 +103,19 @@ if __name__ == "__main__":
         'GPreempt': 's',
         'xsched': '^',
         'GVM': 'D',
-        'GVMDYN': 'D',
-        'GVMCOOP': 'D'
+        'GVMFT': 'D',
+        'GVMAC': 'D'
     }
 
     # Categorize methods by system
     def get_system(method):
         print(method)
-        if method.startswith('GVMCOOP'):
-            print('GVMCOOP')
-            return 'GVMCOOP'
-        elif method.startswith('GVMDYN'):
-            print('GVMDYN')
-            return 'GVMDYN'
+        if method.startswith('GVMAC'):
+            print('GVMAC')
+            return 'GVMAC'
+        elif method.startswith('GVMFT'):
+            print('GVMFT')
+            return 'GVMFT'
         elif method.startswith('GVM') and not (method.startswith('GVM-2') and method.endswith('16G')) and not (method.endswith("10-2") or method.endswith("8-2")):
             print('GVM')
             return 'GVM'
@@ -152,9 +158,9 @@ if __name__ == "__main__":
     # Plot points grouped by system with different colors and markers
     legend_handles = []
     # Define legend order to match bar chart (excluding exclusive)
-    # Legend order: 3x2 grid with Ghost family in second column
-    # Row-by-row: TGS|Ghost, GPreempt|GhostFT, xsched|GhostAC
-    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'GVMCOOP']
+    # Legend order: 3x2 grid with the GVM family in the second column.
+    # Row-by-row: TGS|GVM, GPreempt|GVMFT, xsched|GVMAC
+    legend_order = ['TGS', 'GPreempt', 'xsched', 'GVM', 'GVMFT', 'GVMAC']
 
     for system in legend_order:
         if system in system_groups and system in methods_color_map:

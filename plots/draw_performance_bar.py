@@ -6,14 +6,20 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 
-# Display name aliases (directory name -> display name)
-ALIAS = {"GVM": "GhostFT", "GVMDYN": "GhostFT", "GVMCOOP": "GhostAC"}
+from result_files import latest_complete_results
+
+# Public artifact names. Legacy result filenames are normalized separately in
+# result_files.py and should not affect labels shown in figures.
+ALIAS = {"GVM": "GVM", "GVMFT": "GVMFT", "GVMAC": "GVMAC"}
 
 # Global Configuration
 FONT_SIZE = 15
 FIGURE_SIZE = (14, 2.8)
 # Canonical ordering - methods not present in data are automatically skipped
-ALL_METHODS_ORDER = ['MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMDYN', 'GVMCOOP', 'exclusive']
+ALL_METHODS_ORDER = [
+    'MIG', 'TGS', 'GPreempt', 'xsched', 'GVM', 'GVMFT', 'GVMAC',
+    'exclusive',
+]
 HATCH_PATTERNS = ['/', '\\', 'x', 'o', '+', '.']
 STUCK_SENTINEL = 'STUCK'
 VLLM_SPACING_REDUCTION = 0.65  # Reduce vLLM subplot gaps to 65% of original
@@ -27,8 +33,8 @@ METHOD_COLORS = {
     'GPreempt': 'tab:orange',
     'xsched': 'tab:green',
     'GVM': 'tab:pink',
-    'GVMDYN': 'tab:pink',
-    'GVMCOOP': 'tab:brown',
+    'GVMFT': 'tab:pink',
+    'GVMAC': 'tab:brown',
     'exclusive': 'tab:red'
 }
 EXCLUSIVE_LINE_COLOR = 'tab:red'
@@ -81,14 +87,22 @@ def calculate_metric(application, filepath):
 def load_data(input_path):
     dir_name = os.path.basename(os.path.normpath(input_path))
     # Strip suffixes like .vl from application names for matching filenames
-    applications = [app.split(".")[0] for app in dir_name.split("+")]
+    applications = [
+        app.split(".")[0].replace("-", "_")
+        for app in dir_name.split("+")
+    ]
     results = {application: {} for application in applications}
     detected_methods = set()
 
-    for f in os.listdir(input_path):
-        application = f.split("-")[0]
-        method = "-".join(f.split("-")[1:2])
-        results[application][method] = calculate_metric(application, os.path.join(input_path, f))
+    selected = latest_complete_results(
+        input_path,
+        applications,
+        normalize_label=lambda label: label.split("-", 1)[0],
+    )
+    for method, files in selected.items():
+        for application, path in files.items():
+            results[application][method] = calculate_metric(application, path)
+            print(f"Selected {application}/{method}: {path.name}")
         detected_methods.add(method)
 
     # Filter and order methods based on what's actually in the data
