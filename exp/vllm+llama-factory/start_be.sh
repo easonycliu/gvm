@@ -71,7 +71,7 @@ if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; the
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH llamafactory-cli train $script_dir/$config &
 elif [ "$method" == "exclusive-be" ]; then
 	source $project_dir/venv/LFVenv/bin/activate
-	llamafactory-cli train $script_dir/$config &
+	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH llamafactory-cli train $script_dir/$config &
 elif [ "$method" == "GPreempt" ]; then
 	source $project_dir/venv/LFVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH llamafactory-cli train $script_dir/$config &

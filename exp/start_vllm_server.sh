@@ -82,7 +82,7 @@ elif [ "$method" == "GVMAC" ]; then
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH vllm serve $model $param &
 elif [ "$method" == "exclusive-lc" ]; then
 	source $project_dir/venv/VllmVenv/bin/activate
-	vllm serve $model $param &
+	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH vllm serve $model $param &
 elif [ "$method" == "GPreempt" ]; then
 	source $project_dir/venv/VllmVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH vllm serve $model $param &
