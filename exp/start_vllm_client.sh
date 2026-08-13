@@ -81,6 +81,18 @@ if [ -n $pidfile ]; then
 	echo $rootpid | tee $pidfile
 fi
 
-wait $rootpid
+forward_signal() {
+	kill -"$1" "$rootpid" 2>/dev/null || true
+}
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+wait "$rootpid"
+status=$?
+while kill -0 "$rootpid" 2>/dev/null; do
+	wait "$rootpid"
+	status=$?
+done
 
 set +x
+exit $status

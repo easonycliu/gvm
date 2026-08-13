@@ -4,6 +4,7 @@ script_dir=$(dirname ${BASH_SOURCE[0]})
 project_dir=$(realpath $script_dir/..)
 
 pidfile=
+control_pidfile=
 method=
 priority=
 memlimit=
@@ -16,6 +17,9 @@ for flag in "$@"; do
 	case $flag in
 		--pidfile=*)
 			pidfile=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--control-pidfile=*)
+			control_pidfile=$(echo $flag | awk -F = '{print $2}')
 			;;
 		--method=*)
 			method=$(echo $flag | awk -F = '{print $2}')
@@ -111,6 +115,9 @@ else
 fi
 
 rootpid=$!
+if [ -n "$control_pidfile" ]; then
+	echo "$rootpid" | tee "$control_pidfile"
+fi
 if [ -n $pidfile ]; then
 	while true; do
 		if nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv | grep "VLLM"; then
@@ -129,5 +136,16 @@ elif [ "$method" == "GPreempt" ]; then
 	$script_dir/setup_cgroup.sh --priority=0 --memlimit=400000000000 --rootpid=$rootpid
 fi
 
-trap 'wait $rootpid; exit' INT
-wait $rootpid
+forward_signal() {
+	kill -"$1" "$rootpid" 2>/dev/null || true
+}
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+wait "$rootpid"
+status=$?
+while kill -0 "$rootpid" 2>/dev/null; do
+	wait "$rootpid"
+	status=$?
+done
+exit $status

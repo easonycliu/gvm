@@ -160,15 +160,30 @@ async def run_benchmark(args, requests):
                 session, args.api_url, args.model, request, args.ignore_eos, progress, semaphore
             )))
 
+        pending = set(tasks)
+        outputs = []
+        # Continue observing the signal event while responses drain. A plain
+        # gather() here would not wake when SIGTERM arrives after submission.
+        while pending and not interrupted:
+            if stop.is_set():
+                interrupted = True
+                break
+            done, pending = await asyncio.wait(
+                pending, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in done:
+                if not task.cancelled() and task.exception() is None:
+                    outputs.append(task.result())
+
         if interrupted:
-            done = [task for task in tasks if task.done()]
-            outputs = [task.result() for task in done]
-            for task in tasks:
-                if not task.done():
+            # Preserve every response that completed before shutdown, then
+            # cancel requests still waiting on or streaming from the server.
+            for task in list(pending):
+                if task.done() and not task.cancelled() and task.exception() is None:
+                    outputs.append(task.result())
+                elif not task.done():
                     task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-        else:
-            outputs = await asyncio.gather(*tasks)
+            await asyncio.gather(*pending, return_exceptions=True)
     progress.close()
     return time.perf_counter() - started, outputs
 

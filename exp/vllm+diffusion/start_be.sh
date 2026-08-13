@@ -97,7 +97,7 @@ elif [ "$method" == "xsched" ]; then
 	export LD_LIBRARY_PATH=$project_dir/3rdparty/xsched/output/lib:$LD_LIBRARY_PATH
 
 	source $project_dir/venv/DiffusionVenv/bin/activate
-	python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file
+	python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file &
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/venv/DiffusionVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH python3 $diffusion_script --dataset_path vidprom.txt --log_file $log_file &
@@ -121,5 +121,19 @@ elif [ "$method" == "GPreempt" ]; then
 	$project_dir/exp/setup_cgroup.sh --priority=15 --memlimit=400000000000 --rootpid=$rootpid
 fi
 
-trap 'wait $rootpid; exit' INT
-wait $rootpid
+forward_signal() {
+	# A scheduler may have stopped the workload. Resume it before delivering a
+	# signal so Python can run its handler and write the metrics file.
+	kill -CONT "$rootpid" 2>/dev/null || true
+	kill -"$1" "$rootpid" 2>/dev/null || true
+}
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+wait "$rootpid"
+status=$?
+while kill -0 "$rootpid" 2>/dev/null; do
+	wait "$rootpid"
+	status=$?
+done
+exit $status
