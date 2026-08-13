@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Standalone BurstGPT benchmark for OpenAI-compatible completion servers."""
+"""Standalone BurstGPT text/video benchmark for OpenAI-compatible servers."""
 
 import argparse
 import asyncio
+import base64
 import csv
 import json
 import signal
@@ -25,6 +26,7 @@ class SampleRequest:
     prompt_len: int
     output_len: int
     timestamp: float
+    multi_modal_content: dict | None = None
 
 
 @dataclass
@@ -39,7 +41,9 @@ class RequestOutput:
     error: str = ""
 
 
-def load_burstgpt(path: str, tokenizer, count: int, time_scale: float) -> list[SampleRequest]:
+def load_burstgpt(
+    path: str, tokenizer, count: int, time_scale: float
+) -> list[SampleRequest]:
     requests = []
     with open(path, newline="", encoding="utf-8") as source:
         for row in csv.DictReader(source):
@@ -69,17 +73,96 @@ def load_burstgpt(path: str, tokenizer, count: int, time_scale: float) -> list[S
     return requests
 
 
+def encode_video(path: Path) -> dict:
+    video = base64.b64encode(path.read_bytes()).decode("ascii")
+    return {
+        "type": "video_url",
+        "video_url": {"url": f"data:video/mp4;base64,{video}"},
+    }
+
+
+def load_burstgpt_video(
+    path: str,
+    video_dir: str,
+    tokenizer,
+    count: int,
+    time_scale: float,
+    output_len: int,
+) -> list[SampleRequest]:
+    cache_root = Path(video_dir)
+    manifest_path = cache_root / "manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{video_dir} has no manifest.json; build it with "
+            "exp/data/build_mmvu_cache.py"
+        )
+    entries = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not entries:
+        raise ValueError(f"{manifest_path} is empty")
+
+    timestamps = []
+    with open(path, newline="", encoding="utf-8") as source:
+        for row in csv.DictReader(source):
+            if int(row["Response tokens"]) > 0:
+                timestamps.append(float(row["Timestamp"]) / time_scale)
+                if len(timestamps) == count:
+                    break
+    if len(timestamps) < count:
+        raise ValueError(
+            f"Requested {count} prompts, but only found "
+            f"{len(timestamps)} usable trace rows"
+        )
+
+    encoded: dict[int, dict] = {}
+    requests = []
+    for index, timestamp in enumerate(timestamps):
+        entry_index = index % len(entries)
+        entry = entries[entry_index]
+        if entry_index not in encoded:
+            video_path = (cache_root / entry["video"]).resolve()
+            if not video_path.is_file():
+                raise FileNotFoundError(f"Video in manifest is missing: {video_path}")
+            encoded[entry_index] = encode_video(video_path)
+        prompt = entry.get("question") or "Describe the video."
+        prompt_len = len(tokenizer(prompt, add_special_tokens=True).input_ids)
+        requests.append(SampleRequest(
+            prompt=prompt,
+            prompt_len=prompt_len,
+            output_len=output_len,
+            timestamp=timestamp,
+            multi_modal_content=encoded[entry_index],
+        ))
+    requests.sort(key=lambda request: request.timestamp)
+    return requests
+
+
 async def send_request(session, url, model, request, ignore_eos, progress, semaphore):
     output = RequestOutput(prompt_len=request.prompt_len)
-    payload = {
-        "model": model,
-        "prompt": request.prompt,
-        "temperature": 0.0,
-        "repetition_penalty": 1.0,
-        "max_tokens": request.output_len,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-    }
+    if request.multi_modal_content:
+        payload = {
+            "model": model,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": request.prompt},
+                    request.multi_modal_content,
+                ],
+            }],
+            "temperature": 0.0,
+            "max_completion_tokens": request.output_len,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+    else:
+        payload = {
+            "model": model,
+            "prompt": request.prompt,
+            "temperature": 0.0,
+            "repetition_penalty": 1.0,
+            "max_tokens": request.output_len,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
     if ignore_eos:
         payload["ignore_eos"] = True
 
@@ -96,11 +179,17 @@ async def send_request(session, url, model, request, ignore_eos, progress, semap
                     line = raw_line.strip()
                     if not line:
                         continue
+                    if line.startswith(b":"):
+                        continue
                     chunk = line.decode("utf-8").removeprefix("data: ")
                     if chunk == "[DONE]":
                         continue
                     data = json.loads(chunk)
                     if choices := data.get("choices"):
+                        choice = choices[0]
+                        text = (choice.get("delta", {}).get("content")
+                                if request.multi_modal_content
+                                else choice.get("text"))
                         now = time.perf_counter()
                         if first_chunk:
                             output.ttft = now - started
@@ -108,7 +197,7 @@ async def send_request(session, url, model, request, ignore_eos, progress, semap
                         else:
                             output.itl.append(now - most_recent)
                         most_recent = now
-                        output.generated_text += choices[0].get("text") or ""
+                        output.generated_text += text or ""
                     if usage := data.get("usage"):
                         output.output_tokens = usage.get("completion_tokens") or 0
                 output.latency = most_recent - started
@@ -132,7 +221,11 @@ async def send_request(session, url, model, request, ignore_eos, progress, semap
 async def run_benchmark(args, requests):
     timeout = aiohttp.ClientTimeout(total=6 * 60 * 60)
     connector = aiohttp.TCPConnector(limit=0)
-    semaphore = asyncio.Semaphore(args.max_concurrency) if args.max_concurrency else None
+    semaphore = (
+        asyncio.Semaphore(args.max_concurrency)
+        if args.max_concurrency
+        else None
+    )
     progress = tqdm(total=len(requests))
     tasks = []
     started = time.perf_counter()
@@ -143,7 +236,9 @@ async def run_benchmark(args, requests):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector, trust_env=True) as session:
+    async with aiohttp.ClientSession(
+        timeout=timeout, connector=connector, trust_env=True
+    ) as session:
         for request in requests:
             delay = started + request.timestamp - time.perf_counter()
             if delay > 0:
@@ -157,7 +252,13 @@ async def run_benchmark(args, requests):
                 interrupted = True
                 break
             tasks.append(asyncio.create_task(send_request(
-                session, args.api_url, args.model, request, args.ignore_eos, progress, semaphore
+                session,
+                args.api_url,
+                args.model,
+                request,
+                args.ignore_eos,
+                progress,
+                semaphore,
             )))
 
         pending = set(tasks)
@@ -222,6 +323,7 @@ def build_result(args, requests, duration, outputs):
     result = {
         "date": datetime.now().strftime("%Y%m%d-%H%M%S"),
         "backend": "vllm",
+        "mode": args.mode,
         "model_id": args.model,
         "tokenizer_id": args.tokenizer,
         "num_prompts": len(requests),
@@ -257,9 +359,13 @@ def parse_args():
     parser.add_argument("--model", required=True)
     parser.add_argument("--tokenizer")
     parser.add_argument("--dataset-path", required=True)
+    parser.add_argument("--mode", choices=("text", "video"), default="text")
+    parser.add_argument("--video-dir",
+                        help="local MMVU cache containing manifest.json")
+    parser.add_argument("--expected-output-len", type=int, default=64)
     parser.add_argument("--num-prompts", type=int, default=1000)
     parser.add_argument("--time-scale", type=float, default=200.0)
-    parser.add_argument("--api-url", default="http://127.0.0.1:8000/v1/completions")
+    parser.add_argument("--api-url")
     parser.add_argument("--max-concurrency", type=int)
     parser.add_argument("--ignore-eos", action="store_true")
     parser.add_argument("--trust-remote-code", action="store_true")
@@ -267,6 +373,13 @@ def parse_args():
     parser.add_argument("--result-filename")
     args = parser.parse_args()
     args.tokenizer = args.tokenizer or args.model
+    if args.mode == "video" and not args.video_dir:
+        parser.error("--video-dir is required with --mode=video")
+    if args.expected_output_len <= 0:
+        parser.error("--expected-output-len must be positive")
+    if args.api_url is None:
+        endpoint = "chat/completions" if args.mode == "video" else "completions"
+        args.api_url = f"http://127.0.0.1:8000/v1/{endpoint}"
     if args.time_scale <= 0:
         parser.error("--time-scale must be positive")
     return args
@@ -277,12 +390,22 @@ def main():
     args.tokenizer_obj = AutoTokenizer.from_pretrained(
         args.tokenizer, trust_remote_code=args.trust_remote_code
     )
-    requests = load_burstgpt(
-        args.dataset_path,
-        args.tokenizer_obj,
-        args.num_prompts,
-        args.time_scale,
-    )
+    if args.mode == "video":
+        requests = load_burstgpt_video(
+            args.dataset_path,
+            args.video_dir,
+            args.tokenizer_obj,
+            args.num_prompts,
+            args.time_scale,
+            args.expected_output_len,
+        )
+    else:
+        requests = load_burstgpt(
+            args.dataset_path,
+            args.tokenizer_obj,
+            args.num_prompts,
+            args.time_scale,
+        )
     duration, outputs = asyncio.run(run_benchmark(args, requests))
     result = build_result(args, requests, duration, outputs)
     filename = args.result_filename or (

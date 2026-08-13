@@ -14,7 +14,7 @@
 	path = 3rdparty/TGS
 	url = git@github.com:easonycliu/gvm-tgs.git
 [submodule "xsched"]
-	path = 3rdparty/GPreempt
+	path = 3rdparty/xsched
 	url = git@github.com:easonycliu/gvm-xsched.git
 [submodule "vllm"]
 	path = apps/vllm

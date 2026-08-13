@@ -63,18 +63,29 @@ fi
 
 echo "Running burstgpt"
 set -x
+source $project_dir/venv/BenchmarkVenv/bin/activate
+benchmark_args=(
+	--model "$model"
+	--dataset-path "$dataset"
+	--num-prompts "$prompts"
+	--tokenizer "$model"
+	--trust-remote-code
+	--result-dir "$result_dir"
+	--result-filename "$result_filename"
+)
 if [ "$mode" == "text" ]; then
-	source $project_dir/venv/BenchmarkVenv/bin/activate
-	python3 $project_dir/apps/benchmark/benchmark_serving.py --model $model --dataset-path $dataset --num-prompts $prompts --tokenizer $model --trust-remote-code --result-dir $result_dir --result-filename $result_filename &
+	python3 $project_dir/apps/benchmark/benchmark_serving.py \
+		"${benchmark_args[@]}" &
 elif [ "$mode" == "video" ]; then
-	source $project_dir/venv/VllmVenv/bin/activate
-	python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend openai-chat --endpoint /v1/chat/completions --dataset-name burstgpt-video --dataset-path $dataset --burstgpt-video-dir $project_dir/exp/data/mmvu_cache --num-prompts $prompts --expected-output-len 64 --tokenizer $model --trust-remote-code --save-result --save-detailed --result-dir $result_dir --result-filename $result_filename &
+	python3 $project_dir/apps/benchmark/benchmark_serving.py \
+		"${benchmark_args[@]}" \
+		--mode video \
+		--video-dir "$project_dir/exp/data/mmvu_cache" \
+		--expected-output-len 64 &
 else
 	echo "Unsupported mode $mode"
 	exit
 fi
-
-# python3 $project_dir/apps/vllm/benchmarks/benchmark_serving.py --model $model --backend vllm --dataset-name random --num-prompts $prompts --random-input-len 2048 --random-output-len 128 --random-range-ratio 0.2 --request-rate 4 --burstiness 1 --trust-remote-code --save-result --save-detailed --result-dir $project_dir/apps/vllm/benchmark_log
 
 rootpid=$!
 if [ -n $pidfile ]; then

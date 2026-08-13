@@ -100,7 +100,9 @@ elif [ "$method" == "xsched" ]; then
 	export XSCHED_AUTO_XQUEUE_BATCH_SIZE=8
 	export LD_LIBRARY_PATH=$project_dir/3rdparty/xsched/output/lib:$LD_LIBRARY_PATH
 
-	source $project_dir/venv/VllmVenv/bin/activate
+	# XSched requires the vLLM integration hooks in the adapted source tree;
+	# interception alone is not fully transparent for vLLM.
+	source $project_dir/venv/VllmACVenv/bin/activate
 	vllm serve $model $param &
 elif [ "$method" == "UVM" ]; then
 	source $project_dir/venv/VllmVenv/bin/activate
