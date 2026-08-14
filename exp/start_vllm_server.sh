@@ -142,10 +142,15 @@ if [ -n $pidfile ]; then
 	done
 fi
 
+cgroup_target=(--rootpid="$rootpid")
+if [ -n "$vllm_active_process" ]; then
+	cgroup_target=(--gpupid="$vllm_active_process")
+fi
+
 if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	$script_dir/setup_cgroup.sh --priority=$priority --memlimit=$memlimit --rootpid=$rootpid
+	$script_dir/setup_cgroup.sh --priority="$priority" --memlimit="$memlimit" "${cgroup_target[@]}"
 elif [ "$method" == "GPreempt" ]; then
-	$script_dir/setup_cgroup.sh --priority=0 --memlimit=400000000000 --rootpid=$rootpid
+	$script_dir/setup_cgroup.sh --priority=0 --memlimit=400000000000 "${cgroup_target[@]}"
 fi
 
 forward_signal() {

@@ -3,6 +3,7 @@
 priority=
 memlimit=
 rootpid=
+gpupid=
 for flag in "$@"; do
 	case $flag in
 		--priority=*)
@@ -13,6 +14,9 @@ for flag in "$@"; do
 			;;
 		--rootpid=*)
 			rootpid=$(echo $flag | awk -F = '{print $2}')
+			;;
+		--gpupid=*)
+			gpupid=$(echo $flag | awk -F = '{print $2}')
 			;;
 		*)
 			echo "Unknown command-line flag" $flag
@@ -27,16 +31,20 @@ if [ -z $memlimit ]; then
 	echo "Missing operand: --memlimit"
 	exit
 fi
-if [ -z $rootpid ]; then
-	echo "Missing operand: --rootpid"
+if [ -z "$rootpid" ] && [ -z "$gpupid" ]; then
+	echo "Missing operand: --rootpid or --gpupid"
 	exit
 fi
 
 while true; do
-	child_pids=$(pstree -p $rootpid 2>/dev/null | grep -oP '\(\d+\)' | tr -d '()')
-	if [ -z "$child_pids" ]; then
-		echo "Break because no pid is found"
-		break
+	if [ -n "$gpupid" ]; then
+		child_pids=$gpupid
+	else
+		child_pids=$(pstree -p "$rootpid" 2>/dev/null | grep -oP '\(\d+\)' | tr -d '()')
+		if [ -z "$child_pids" ]; then
+			echo "Break because no pid is found under root pid $rootpid"
+			break
+		fi
 	fi
 
 	gpu_pids=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader)

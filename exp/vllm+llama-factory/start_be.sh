@@ -116,9 +116,9 @@ if [ -n $pidfile ]; then
 fi
 
 if [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	$project_dir/exp/setup_cgroup.sh --priority=$priority --memlimit=$memlimit --rootpid=$rootpid
+	$project_dir/exp/setup_cgroup.sh --priority="$priority" --memlimit="$memlimit" --gpupid="$rootpid"
 elif [ "$method" == "GPreempt" ]; then
-	$project_dir/exp/setup_cgroup.sh --priority=15 --memlimit=400000000000 --rootpid=$rootpid
+	$project_dir/exp/setup_cgroup.sh --priority=15 --memlimit=400000000000 --gpupid="$rootpid"
 fi
 
 forward_signal() {
