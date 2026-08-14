@@ -170,6 +170,7 @@ scheduler_pid=
 if [ "$method" == "xsched" ]; then
 	$exp_dir/launch_xserver.sh &
 	scheduler_pid=$!
+	sleep 3
 fi
 
 model=
