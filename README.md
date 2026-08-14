@@ -100,7 +100,7 @@ cd ~/gvm
 python3.12 -m venv venv/VllmVenv
 source venv/VllmVenv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install vllm==0.10.1.1
+python -m pip install transformers==4.53.2 vllm==0.10.1.1
 deactivate
 ```
 
