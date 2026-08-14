@@ -10,6 +10,9 @@ memlimit=
 device=
 config=
 mode=text
+# run_all pipes this output through the readiness reader. Force Python to emit
+# each Trainer metrics line immediately instead of block-buffering the pipe.
+export PYTHONUNBUFFERED=1
 for flag in "$@"; do
 	case $flag in
 		--pidfile=*)
@@ -76,7 +79,7 @@ elif [ "$method" == "GPreempt" ]; then
 	source $project_dir/venv/LFVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH llamafactory-cli train $script_dir/$config &
 elif [ "$method" == "TGS" ]; then
-	docker run --rm --name job_1 --gpus "device=0" --ipc host --network host --cap-add sys_nice -u root --cpuset-cpus 0-5 -v $project_dir/apps/LLaMA-Factory:/LLaMA-Factory -v $script_dir:/exp -v ~/.cache/huggingface:/root/.cache/huggingface -v $project_dir/3rdparty/TGS:/cluster -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcontroller.so:/libcontroller.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so:/libcuda.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so.1:/libcuda.so.1:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so:/libnvidia-ml.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so.1:/libnvidia-ml.so.1:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/ld.so.preload:/etc/ld.so.preload:ro -v $project_dir/3rdparty/TGS/gsharing:/etc/gsharing -w /exp -e TGS_WORKER_IP=10.128.0.122 -e TGS_WORKER_PORT=6889 -e TGS_TRAINER_PORT=47123 -e TGS_JOB_ID=1 -e CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps -e GPU_CONFIG_FILE=/gpu_config.json -e GPU_STATUS_FILE=/gpu_status.json easonliu12138/gvm_cuda_12_9 bash -c "pip3 install peft==0.15.2 --break-system-packages && llamafactory-cli train /exp/$config" &
+	docker run --rm --name job_1 --gpus "device=0" --ipc host --network host --cap-add sys_nice -u root --cpuset-cpus 0-5 -v $project_dir/apps/LLaMA-Factory:/LLaMA-Factory -v $script_dir:/exp -v ~/.cache/huggingface:/root/.cache/huggingface -v $project_dir/3rdparty/TGS:/cluster -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcontroller.so:/libcontroller.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so:/libcuda.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libcuda.so.1:/libcuda.so.1:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so:/libnvidia-ml.so:ro -v $project_dir/3rdparty/TGS/hijack/low-priority-lib/libnvidia-ml.so.1:/libnvidia-ml.so.1:ro -v $project_dir/3rdparty/TGS/hijack/high-priority-lib/ld.so.preload:/etc/ld.so.preload:ro -v $project_dir/3rdparty/TGS/gsharing:/etc/gsharing -w /exp -e PYTHONUNBUFFERED=1 -e TGS_WORKER_IP=10.128.0.122 -e TGS_WORKER_PORT=6889 -e TGS_TRAINER_PORT=47123 -e TGS_JOB_ID=1 -e CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps -e GPU_CONFIG_FILE=/gpu_config.json -e GPU_STATUS_FILE=/gpu_status.json easonliu12138/gvm_cuda_12_9 bash -c "pip3 install peft==0.15.2 --break-system-packages && llamafactory-cli train /exp/$config" &
 elif [ "$method" == "xsched" ]; then
 	if [ -z "$(ps -a | grep -e "xserver$")" ]; then
 		echo "Please launch xsched server before start application with xsched"
