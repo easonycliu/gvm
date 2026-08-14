@@ -67,6 +67,13 @@ else
 	esac
 fi
 check_python_package "GVMAC Transformers" "VllmACVenv" "transformers" "4.53.2"
+if [ -x "$ac_python" ]; then
+	if gvm_notify_path=$("$ac_python" -c 'import gvm_notify; print(gvm_notify.__file__)' 2>&1); then
+		pass "gvm-notify import ($gvm_notify_path)"
+	else
+		fail "gvm-notify: import failed in VllmACVenv; run 'cd gvm-notify && make install-python' ($gvm_notify_path)"
+	fi
+fi
 
 vllm_python=$project_dir/venv/VllmVenv/bin/python3
 interposer_dir=$project_dir/gvm-cuda-driver/install

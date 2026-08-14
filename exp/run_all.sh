@@ -192,36 +192,69 @@ client_script_pid=
 preempt_pid=
 preempt_pid_file=$(mktemp)
 preempt_script_pid=
+lc_ready_file=$(mktemp)
+be_ready_file=$(mktemp)
+rm -f "$lc_ready_file" "$be_ready_file"
+
+wait_for_ready() {
+	local ready_file=$1
+	local launcher_pid=$2
+	local workload=$3
+	while [ ! -e "$ready_file" ]; do
+		if ! kill -0 "$launcher_pid" 2>/dev/null; then
+			echo "$workload exited before becoming ready"
+			wait "$launcher_pid" 2>/dev/null || true
+			exit 1
+		fi
+		sleep 0.5
+	done
+	echo "$workload is ready"
+}
+
+if [ "$experiment_name" == "vllm+diffusion" ]; then
+	be_ready_signal=diffusion
+else
+	be_ready_signal=llamafactory
+fi
+effective_lcmemlimit=$lcmemlimit
+effective_bememlimit=$bememlimit
+if [ "$method" == "GVMAC" ]; then
+	effective_lcmemlimit=27000000000
+	effective_bememlimit=12000000000
+fi
 if [ "$method" == "exclusive-lc" ]; then
-	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model > >(bash "$exp_dir/readiness_reader.sh" vllm "$lc_ready_file") 2>&1 &
 	server_script_pid=$!
-	# Preserve the same vLLM warm-up time used by paired experiments.
-	sleep 60
 elif [ "$method" == "exclusive-be" ]; then
-	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode $be_output_arg &
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode $be_output_arg > >(bash "$exp_dir/readiness_reader.sh" "$be_ready_signal" "$be_ready_file") 2>&1 &
 	preempt_script_pid=$!
 elif [[ "$method" == "GVM" || "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
-	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model --memlimit=$lcmemlimit --priority=$lcpriority &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model --memlimit=$effective_lcmemlimit --priority=$lcpriority > >(bash "$exp_dir/readiness_reader.sh" vllm "$lc_ready_file") 2>&1 &
 	server_script_pid=$!
-	sleep 60
-	$be_launcher --pidfile=$preempt_pid_file --method=$method --memlimit=$bememlimit --priority=$bepriority --mode=$mode $be_output_arg &
+	wait_for_ready "$lc_ready_file" "$server_script_pid" "vLLM"
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --memlimit=$effective_bememlimit --priority=$bepriority --mode=$mode $be_output_arg > >(bash "$exp_dir/readiness_reader.sh" "$be_ready_signal" "$be_ready_file") 2>&1 &
 	preempt_script_pid=$!
 elif [ "$method" == "MIG" ]; then
-	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model --device=$lcdevice &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model --device=$lcdevice > >(bash "$exp_dir/readiness_reader.sh" vllm "$lc_ready_file") 2>&1 &
 	server_script_pid=$!
-	sleep 60
-	$be_launcher --pidfile=$preempt_pid_file --method=$method --device=$bedevice --mode=$mode $be_output_arg &
+	wait_for_ready "$lc_ready_file" "$server_script_pid" "vLLM"
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --device=$bedevice --mode=$mode $be_output_arg > >(bash "$exp_dir/readiness_reader.sh" "$be_ready_signal" "$be_ready_file") 2>&1 &
 	preempt_script_pid=$!
 else
-	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model &
+	$exp_dir/start_vllm_server.sh --pidfile=$server_pid_file --control-pidfile=$server_control_pid_file --method=$method --mode=$mode --model=$model > >(bash "$exp_dir/readiness_reader.sh" vllm "$lc_ready_file") 2>&1 &
 	server_script_pid=$!
-	sleep 60
-	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode $be_output_arg &
+	wait_for_ready "$lc_ready_file" "$server_script_pid" "vLLM"
+	$be_launcher --pidfile=$preempt_pid_file --method=$method --mode=$mode $be_output_arg > >(bash "$exp_dir/readiness_reader.sh" "$be_ready_signal" "$be_ready_file") 2>&1 &
 	preempt_script_pid=$!
 fi
 
-echo "Waiting for system startup"
-sleep 90
+echo "Waiting for workload readiness"
+if [ "$launch_lc" -eq 1 ]; then
+	wait_for_ready "$lc_ready_file" "$server_script_pid" "vLLM"
+fi
+if [ "$launch_be" -eq 1 ]; then
+	wait_for_ready "$be_ready_file" "$preempt_script_pid" "BE workload"
+fi
 
 if [ "$launch_lc" -eq 1 ]; then
 	while [ ! -s "$server_pid_file" ]; do sleep 0.5; done
@@ -233,11 +266,18 @@ if [ "$launch_be" -eq 1 ]; then
 	while [ ! -s "$preempt_pid_file" ]; do sleep 0.5; done
 	preempt_pid=$(cat $preempt_pid_file)
 fi
-rm -f "$server_pid_file" "$server_control_pid_file" "$preempt_pid_file"
+rm -f "$server_pid_file" "$server_control_pid_file" "$preempt_pid_file" \
+	"$lc_ready_file" "$be_ready_file"
 
 if [[ "$method" == "GVMFT" || "$method" == "GVMAC" ]]; then
 	mkdir -p $exp_dir/scheduler_logs
-	sudo $exp_dir/launch_scheduler.py --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $lcmemlimit --bememlimit $bememlimit --trace-file=$exp_dir/scheduler_logs/scheduler-$method_label-$result_timestamp.csv &
+	scheduler_policy=ft
+	scheduler_lcmemlimit=$effective_lcmemlimit
+	scheduler_bememlimit=$effective_bememlimit
+	if [ "$method" == "GVMAC" ]; then
+		scheduler_policy=ac
+	fi
+	sudo $exp_dir/launch_scheduler.py --policy $scheduler_policy --lcpid $server_pid --bepid $preempt_pid --lcmemlimit $scheduler_lcmemlimit --bememlimit $scheduler_bememlimit --trace-file=$exp_dir/scheduler_logs/scheduler-$method_label-$result_timestamp.csv &
 	scheduler_pid=$!
 fi
 

@@ -181,6 +181,12 @@ export NVTOOLSEXT_PATH="$VIRTUAL_ENV/lib/python3.12/site-packages/nvidia/nvtx"
 export MAX_JOBS=6
 python -m pip install --no-build-isolation --editable .
 python -m pip check
+
+# Install the notification extension into VllmACVenv. The adapted vLLM uses
+# this module to receive memory.limit.high changes and resize its KV cache.
+cd ~/gvm/gvm-notify
+make install-python
+python -c 'import gvm_notify; print("gvm-notify import: OK")'
 deactivate
 ```
 
@@ -192,7 +198,7 @@ Verify the dependency versions in `VllmACVenv`:
 
 ```bash
 source ~/gvm/venv/VllmACVenv/bin/activate
-python -c 'import numpy, tokenizers, transformers; print("numpy:", numpy.__version__); print("transformers:", transformers.__version__); print("tokenizers:", tokenizers.__version__)'
+python -c 'import gvm_notify, numpy, tokenizers, transformers; print("gvm-notify: OK"); print("numpy:", numpy.__version__); print("transformers:", transformers.__version__); print("tokenizers:", tokenizers.__version__)'
 ```
 
 The expected versions are NumPy 2.2.6, Transformers 4.53.2, and Tokenizers

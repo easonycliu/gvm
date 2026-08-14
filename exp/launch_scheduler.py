@@ -14,6 +14,7 @@ from pathlib import Path
 
 BASE = "/sys/kernel/debug/nvidia-uvm/processes"
 UNLIMITED = ctypes.c_ulong(-1).value
+AC_LC_HEAVY_LIMIT = 38000000000
 
 
 class State(Enum):
@@ -57,6 +58,7 @@ def arguments():
     parser.add_argument("--bepid", required=True, type=int)
     parser.add_argument("--lcmemlimit", required=True, type=int)
     parser.add_argument("--bememlimit", required=True, type=int)
+    parser.add_argument("--policy", choices=("ft", "ac"), default="ft")
 
     # These are the only policy controls normally worth configuring.
     parser.add_argument("--sample-ms", type=int, default=100)
@@ -136,6 +138,13 @@ def measure(samples, now, seconds):
 def set_limit(pid, limit):
     print(f"Set {pid}'s memory limit to {limit}", flush=True)
     path = os.path.join(BASE, str(pid), "0", "memory.limit.high")
+    with open(path, "w") as limit_file:
+        limit_file.write(f"{limit}\n")
+
+
+def set_low(pid, limit):
+    print(f"Set {pid}'s memory protection to {limit}", flush=True)
+    path = os.path.join(BASE, str(pid), "0", "memory.limit.low")
     with open(path, "w") as limit_file:
         limit_file.write(f"{limit}\n")
 
@@ -295,6 +304,36 @@ class Controller:
         self.demand = Demand.IDLE
         self.drain_bad_since = None
         self.uncalibrated_active_since = None
+        self.lc_heavy_memory = False
+
+    def enter_heavy_memory(self, now):
+        """Give a confirmed HEAVY LC exclusive, protected GPU memory."""
+        self.transition(State.PREEMPTED,
+                        "heavy LC requires exclusive GPU", now)
+        if self.args.policy != "ac" or self.lc_heavy_memory:
+            return
+        # Protect the existing/default LC residency before allowing vLLM to
+        # grow into the larger hard limit. BE is already stopped above.
+        set_low(self.args.lcpid, AC_LC_HEAVY_LIMIT)
+        set_limit(self.args.lcpid, AC_LC_HEAVY_LIMIT)
+        self.lc_heavy_memory = True
+        self.changed = now
+        self.evidence = {"slow": 0.0, "healthy": 0.0}
+        self.last_observation_ended = None
+
+    def leave_heavy_memory(self, now, reason):
+        """Return LC to its normal footprint while BE remains preempted."""
+        if self.args.policy != "ac" or not self.lc_heavy_memory:
+            return False
+        set_low(self.args.lcpid, 0)
+        set_limit(self.args.lcpid, self.args.lcmemlimit)
+        print(f"LC heavy memory -> normal: {reason}", flush=True)
+        self.lc_heavy_memory = False
+        self.changed = now
+        self.evidence = {"slow": 0.0, "healthy": 0.0}
+        self.last_observation_ended = None
+        self.drain_bad_since = None
+        return True
 
     def transition(self, target, reason, now):
         if target == self.state:
@@ -344,6 +383,7 @@ class Controller:
             self.demand = Demand.IDLE
             self.drain_bad_since = None
             self.uncalibrated_active_since = None
+            self.leave_heavy_memory(now, "LC idle")
             self.transition(State.UNLIMITED, "LC idle", now)
             return ("idle-hold" if already_idle else "idle"), 1.0, 0.0, 0.0, 0.0
 
@@ -442,8 +482,15 @@ class Controller:
             # HEAVY is an exclusivity policy, not just a rate baseline. Keep BE
             # stopped even when heavy LC matches its clean completion rate.
             if self.demand == Demand.HEAVY:
+                self.enter_heavy_memory(now)
                 self.evidence["healthy"] = 0.0
                 decision = "exclusive"
+            elif self.args.policy == "ac" and self.lc_heavy_memory:
+                # The 38 GB allocation is intentionally sticky. A temporary
+                # LIGHT/UNKNOWN classification must not resize vLLM again;
+                # only the idle path above returns LC to its normal limit.
+                self.evidence["healthy"] = 0.0
+                decision = "heavy-memory-hold"
             elif (settled and enough_clean_data and enough_demand_data and
                   self.evidence["healthy"] >= confirm):
                 self.calibrating = False
@@ -456,7 +503,7 @@ class Controller:
                 decision = "calibrate" if self.calibrating else "protect"
         elif self.state == State.LIMITED:
             if self.demand == Demand.HEAVY:
-                self.transition(State.PREEMPTED, "heavy LC requires exclusive GPU", now)
+                self.enter_heavy_memory(now)
                 decision = "exclusive"
             elif settled and self.evidence["slow"] >= confirm:
                 self.transition(State.PREEMPTED, "LC exceeds slowdown budget", now)
@@ -470,7 +517,7 @@ class Controller:
         else:
             if self.demand == Demand.HEAVY:
                 self.next_probe = now + self.probe_backoff
-                self.transition(State.PREEMPTED, "heavy LC requires exclusive GPU", now)
+                self.enter_heavy_memory(now)
                 decision = "exclusive"
             elif settled and self.evidence["slow"] >= confirm:
                 self.probe_backoff = min(
@@ -497,6 +544,8 @@ def main():
         raise ValueError("lc-slowdown-budget must be between 0 and 1")
     if args.emergency_margin <= 1:
         raise ValueError("emergency-margin must be greater than 1")
+    if args.policy == "ac" and args.lcmemlimit >= AC_LC_HEAVY_LIMIT:
+        raise ValueError("AC normal LC limit must be below its 38 GB HEAVY limit")
     args.bememlimit = UNLIMITED if args.bememlimit == -1 else args.bememlimit
 
     sample_seconds = args.sample_ms / 1000
@@ -517,7 +566,8 @@ def main():
         trace = path.open("w", newline="")
         writer = csv.writer(trace)
         writer.writerow([
-            "time_s", "state", "demand", "decision",
+            "time_s", "policy", "state", "demand", "decision",
+            "lc_limit_high", "lc_limit_low",
             "submitted", "ended", "pending",
             "finish_rate", "baseline_rate", "relative_rate", "active_ratio",
             "heavy_mode_rate", "light_mode_rate", "mode_boundary_rate",
@@ -564,15 +614,23 @@ def main():
                 demand_samples.append(current)
                 next_demand_observation = now + demand_window_seconds
             previous_state = controller.state
+            previous_lc_heavy = controller.lc_heavy_memory
             decision, relative, pending_guard, backlog_guard, kernel_guard = (
                 controller.evaluate(now, idle_samples, observation,
                                     demand_observation, pending)
             )
 
-            # Never compare or learn from an observation spanning two BE states.
-            if decision == "idle" or controller.state != previous_state:
+            # Never compare or learn from an observation spanning two BE
+            # states or two LC memory configurations.
+            lc_memory_changed = controller.lc_heavy_memory != previous_lc_heavy
+            if (decision == "idle" or controller.state != previous_state
+                    or lc_memory_changed):
                 samples.clear()
                 samples.append(current)
+            if lc_memory_changed:
+                demand_samples.clear()
+                demand_samples.append(current)
+                next_demand_observation = now + demand_window_seconds
 
             if writer:
                 current_observation = observation or Observation(
@@ -583,8 +641,11 @@ def main():
                 drain_bad_ms = (0 if controller.drain_bad_since is None else
                                 (now - controller.drain_bad_since) * 1000)
                 writer.writerow([
-                    f"{now - started:.3f}", controller.state.name,
-                    controller.demand.name, decision,
+                    f"{now - started:.3f}", args.policy,
+                    controller.state.name, controller.demand.name, decision,
+                    (AC_LC_HEAVY_LIMIT if controller.lc_heavy_memory
+                     else args.lcmemlimit),
+                    (AC_LC_HEAVY_LIMIT if controller.lc_heavy_memory else 0),
                     submitted, ended, pending,
                     f"{current_observation.finish_rate:.3f}",
                     f"{(heavy_rate if controller.demand == Demand.HEAVY else light_rate) or controller.learner.baseline_rate():.3f}",

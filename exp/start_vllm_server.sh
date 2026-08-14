@@ -74,6 +74,13 @@ if [ "$mode" == "video" ]; then
 	param=$(echo "--max-model-len 32768" "$param")
 fi
 
+if [ "$method" == "GVMAC" ]; then
+	param="--gpu-memory-utilization 0.65 --disable-log-requests --enforce-eager"
+	if [ "$mode" == "video" ]; then
+		param="--max-model-len 32768 $param"
+	fi
+fi
+
 if [[ "$method" == "GVM" || "$method" == "GVMFT" ]]; then
 	source $project_dir/venv/VllmVenv/bin/activate
 	LD_LIBRARY_PATH=$project_dir/gvm-cuda-driver/install:$LD_LIBRARY_PATH vllm serve $model $param &
