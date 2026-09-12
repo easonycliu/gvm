@@ -261,7 +261,7 @@ application collaboration on top of GVMFT.
 
 `<path-to-dataset>` is the BurstGPT CSV consumed by the standalone vLLM
 benchmark.
-For AE, the `<path-to-dataset>` will be under `~/BurstGPTDataset/burstgpt/BurstGPT_adjust.csv`
+For AE, the `<path-to-dataset>` will be under `$HOME/BurstGPTDataset/burstgpt/BurstGPT_adjust.csv`
 
 ## Overall evaluation
 
